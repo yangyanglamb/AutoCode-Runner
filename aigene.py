@@ -143,15 +143,26 @@ class StreamPrinter:
 def extract_code_from_response(response):
     """代码提取函数（必须定义）"""
     # 提取文件名（如果有）
-    filename_match = re.search(r'文件名[：:]\s*[「『](.+?)[』」]', response)
+    filename_match = re.search(r'『(.+?)』\.py', response)
     suggested_filename = filename_match.group(1) if filename_match else None
     
-    # 提取代码块
+    # 提取代码块（严格格式要求）
     code_blocks = re.findall(
-        r'```python\s*\n?(.*?)\n?\s*```', 
-        response, 
+        r'```\s*\n'  # 开始三引号
+        r'『[\w\s-]+』\.py\n'  # 文件名声明
+        r'((?:#[^\n]*\n)*\n.*?)'  # 捕获所有代码内容，包括依赖声明
+        r'```',  # 结束三引号
+        response,
         flags=re.DOTALL
     )
+    
+    if not code_blocks:
+        # 如果严格格式匹配失败，尝试宽松匹配
+        code_blocks = re.findall(
+            r'```\s*\n?(.*?)\n?\s*```', 
+            response, 
+            flags=re.DOTALL
+        )
     
     if not code_blocks:
         return None, None
@@ -162,13 +173,33 @@ def extract_imports(code_content):
     """使用AST解析器从代码中提取依赖，并从注释中提取版本信息"""
     imports = set()
     try:
-        # 从注释中提取依赖
-        comment_pattern = r'#\s*([a-zA-Z0-9_-]+)==([0-9.]+)'
-        comment_deps = re.findall(comment_pattern, code_content)
-        for lib, version in comment_deps:
-            # 检查是否为标准库
-            if lib and version and lib not in STANDARD_LIBS:  
-                imports.add(f"{lib}=={version}")
+        # 从新格式的注释中提取依赖
+        # 匹配 "依赖包：xxx" 或 "依赖包:xxx" 格式
+        dep_pattern = r'#\s*依赖包[：:]\s*([^（\n]+)'
+        # 匹配 "pip install xxx" 格式
+        pip_pattern = r'#\s*pip\s+install\s+([^\n]+)'
+        
+        # 提取依赖包
+        dep_matches = re.findall(dep_pattern, code_content)
+        if dep_matches:
+            for deps in dep_matches:
+                if deps.strip().lower() != "无":
+                    # 处理可能的多个依赖（用逗号分隔）
+                    for dep in deps.split(','):
+                        dep = dep.strip()
+                        if dep and dep not in STANDARD_LIBS:
+                            imports.add(dep)
+        
+        # 提取pip install行
+        pip_matches = re.findall(pip_pattern, code_content)
+        if pip_matches:
+            for deps in pip_matches:
+                if deps.strip().lower() != "无":
+                    # 处理可能的多个依赖（用空格分隔）
+                    for dep in deps.split():
+                        dep = dep.strip()
+                        if dep and dep not in STANDARD_LIBS:
+                            imports.add(dep)
 
         # 从导入语句中提取依赖
         tree = ast.parse(code_content)
@@ -614,18 +645,30 @@ def main():
             "role": "system",
             "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
 
-
 ## 基础结构
-1. 文件规范
-- 首行标注「文件名：『中文描述』.py」,用『』包裹中文名称
-- 顶部声明依赖包（# pandas）
-- 声明依赖包的前置预装依赖包（# pycairo ）
-- 添加安装说明（# pip install pandas）
+1. 代码块格式（必须严格遵守）
+- 代码块内容必须按以下格式编写：
+文件名：『中文命名』.py
+```
+# 依赖包：xxx
+# 前置预装依赖包：xxx
+# pip install xxx
+# 是否需要处理中文字符：是
+
+import语句
+
+PYTHON39_PATH = "../venv3.9/Scripts/python.exe"
+
+代码内容
+```
+
+2. 代码规范
 - 生成的代码固定声明PYTHON39_PATH = "../venv3.9/Scripts/python.exe"
 
 ## 编码规范
 - 强制使用UTF-8编码
 - 核心逻辑必须添加中文注释
+- 文件处理需要支持中文
 - 使用f-string格式输出日志
 
 ## 安全规范
@@ -649,9 +692,8 @@ def main():
 - 优先选用轻量级依赖包，不需要额外系统依赖
 - 复杂需求提示脚本能力边界
 - 判断依赖包是否需要前置安装为基础，比如manim需要MiKTeX和FFmpeg为基础，请提醒用户
-
-  """
-        }]#提示词
+"""
+        }]
     
         
         console.print(Panel.fit(
