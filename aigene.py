@@ -289,39 +289,51 @@ def install_dependencies(required_libs):
     python_path = setup_virtual_env()
     
     failed_libs = []
+    mirrors = [
+        "https://mirrors.aliyun.com/pypi/simple/",  # 阿里云（优先）
+        "https://pypi.org/simple/",  # PyPI官方源（第二）
+    ]
+    
     with ProgressManager() as progress:
         install_task = progress.add_task("[yellow]正在安装依赖...[/yellow]", total=len(required_libs))
         
         for lib in required_libs:
-            try:
-                # 使用虚拟环境的pip安装
-                cmd = [python_path, "-m", "pip", "install", lib, "--quiet"]
-                result = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=300  # 5分钟超时
-                )
-                
-                if result.returncode == 0:
-                    # 显示不带版本号的包名
-                    lib_name = lib.split('==')[0] if '==' in lib else lib
-                    console.print(f"[green]✅ {lib_name}[/green]")
-                else:
-                    failed_libs.append(lib)
+            installed = False
+            for mirror in mirrors:
+                try:
+                    # 使用虚拟环境的pip安装
+                    cmd = [python_path, "-m", "pip", "install", lib, "--quiet"]
+                    if mirror:
+                        cmd.extend(["-i", mirror])
+                        console.print(f"[yellow]尝试使用下载源: {mirror}[/yellow]")
                     
-                progress.update(install_task, advance=1)
-                
-            except subprocess.TimeoutExpired:
-                failed_libs.append(f"{lib}(超时)")
-                progress.update(install_task, advance=1)
-            except Exception as e:
-                failed_libs.append(f"{lib}({str(e)})")
-                progress.update(install_task, advance=1)
+                    result = subprocess.run(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=300  # 5分钟超时
+                    )
+                    
+                    if result.returncode == 0:
+                        # 显示不带版本号的包名
+                        lib_name = lib.split('==')[0] if '==' in lib else lib
+                        console.print(f"[green]✅ {lib_name}[/green]")
+                        installed = True
+                        break
+                        
+                except subprocess.TimeoutExpired:
+                    continue
+                except Exception as e:
+                    continue
+            
+            if not installed:
+                failed_libs.append(lib)
+            
+            progress.update(install_task, advance=1)
     
     if failed_libs:
-        console.print(f"\n[red]以下依赖安装失败: {', '.join(failed_libs)}[/red]")
+        console.print(f"\n[red]以下依赖安装失败: {', '.join(failed_libs)},若开启了VPN，请关闭VPN后重试[/red]")
         return False
                 
     return True
@@ -428,41 +440,99 @@ def chat_stream(messages, printer, model="deepseek-chat"):
     full_response = []
     reasoning_content = []
     is_reasoning = False  # 标记是否正在输出思维链
-    try:
-        # 直接创建聊天完成并流式输出
-        for chunk in client.chat.completions.create(
-            model=model,  # 使用指定的模型
-            messages=messages,
-            temperature=0.7,
-            stream=True
-        ):
-            # 处理思维链内容
-            if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].delta.reasoning_content:
-                content = chunk.choices[0].delta.reasoning_content
-                reasoning_content.append(content)
-                
-                # 如果是思维链的开始，打印前缀
-                if not is_reasoning:
-                    console.print("\n[bright_blue]（思考中）[/bright_blue] ", end="")
-                    is_reasoning = True
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            # 直接创建聊天完成并流式输出
+            for chunk in client.chat.completions.create(
+                model=model,  # 使用指定的模型
+                messages=messages,
+                temperature=0.7,
+                stream=True,
+                timeout=30  # 添加超时设置
+            ):
+                # 处理思维链内容
+                if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].delta.reasoning_content:
+                    content = chunk.choices[0].delta.reasoning_content
+                    reasoning_content.append(content)
                     
-                # 直接打印思维链内容，使用默认颜色
-                console.print(content, end="")
-                
-            # 处理最终回答内容
-            elif chunk.choices[0].delta.content:
-                # 如果之前在输出思维链，添加结束标记和换行
-                if is_reasoning:
-                    console.print("\n[bright_blue]\n（思考结束）[/bright_blue]")
-                    is_reasoning = False
+                    # 如果是思维链的开始，打印前缀
+                    if not is_reasoning:
+                        console.print("\n[bright_blue]（思考中）[/bright_blue] ", end="")
+                        is_reasoning = True
+                        
+                    # 直接打印思维链内容，使用默认颜色
+                    console.print(content, end="")
                     
-                content = chunk.choices[0].delta.content
-                full_response.append(content)
-                printer.stream_print(content)
+                # 处理最终回答内容
+                elif chunk.choices[0].delta.content:
+                    # 如果之前在输出思维链，添加结束标记和换行
+                    if is_reasoning:
+                        console.print("\n[bright_blue]\n（思考结束）[/bright_blue]")
+                        is_reasoning = False
+                        
+                    content = chunk.choices[0].delta.content
+                    full_response.append(content)
+                    printer.stream_print(content)
+                
+            # 如果成功完成，跳出重试循环
+            break
+                
+        except openai.AuthenticationError:
+            console.print("\n[red]❌ 认证失败，请检查 DEEPSEEK_API_KEY 是否正确[/red]")
+            return {"reasoning_content": "", "content": ""}
             
-    except openai.AuthenticationError:
-        console.print("\n[red]❌ 认证失败，请检查 DEEPSEEK_API_KEY 是否正确[/red]")
-        return ""
+        except (openai.APIConnectionError, openai.APITimeoutError) as e:
+            retry_count += 1
+            console.print(f"\n[red]❌ 连接错误详情：[/red]")
+            console.print(f"[yellow]错误类型：{type(e).__name__}[/yellow]")
+            console.print(f"[yellow]错误信息：{str(e)}[/yellow]")
+            console.print(f"[yellow]错误详情：{repr(e)}[/yellow]")
+            
+            # 根据错误类型提供具体建议
+            if isinstance(e, openai.APIConnectionError):
+                console.print("\n[yellow]可能原因：[/yellow]")
+                console.print("1. 网络连接不稳定或断开")
+                console.print("2. DNS解析失败")
+                console.print("3. 服务器响应超时")
+                console.print("4. 代理配置不正确")
+                console.print("\n[yellow]建议解决方案：[/yellow]")
+                console.print("1. 检查网络连接是否正常")
+                console.print("2. 如果使用VPN，请关闭VPN后重试")
+            elif isinstance(e, openai.APITimeoutError):
+                console.print("\n[yellow]可能原因：[/yellow]")
+                console.print("1. 服务器处理请求时间过长")
+                console.print("2. 网络延迟较高")
+                console.print("3. 系统资源不足")
+                console.print("\n[yellow]建议解决方案：[/yellow]")
+                console.print("1. 检查网络速度是否正常")
+                console.print("2. 尝试减小请求的数据量")
+                console.print("3. 关闭其他占用带宽的程序")
+                console.print("4. 稍后重试")
+            
+            if retry_count < max_retries:
+                wait_time = 2 ** retry_count  # 指数退避
+                console.print(f"\n[yellow]⚠️ 连接失败，{wait_time}秒后进行第{retry_count + 1}次重试...[/yellow]")
+                time.sleep(wait_time)
+            else:
+                console.print("\n[red]❌ 连接失败，请检查网络连接或稍后重试[/red]")
+                console.print("[yellow]建议：[/yellow]")
+                console.print("1. 检查网络连接是否正常")
+                console.print("2. 确认是否可以访问 api.deepseek.com")
+                console.print("3. 如果使用了代理，请检查代理设置")
+                console.print("4. 尝试重启程序")
+                console.print("5. 确认API密钥额度是否充足")
+                console.print("6. 检查系统时间是否准确")
+                return {"reasoning_content": "", "content": ""}
+                
+        except Exception as e:
+            console.print(f"\n[red]❌ 发生未知错误[/red]")
+            console.print(f"[yellow]错误类型：{type(e).__name__}[/yellow]")
+            console.print(f"[yellow]错误信息：{str(e)}[/yellow]")
+            console.print(f"[yellow]错误详情：{repr(e)}[/yellow]")
+            return {"reasoning_content": "", "content": ""}
     
     # 确保思维链在最后也能正确结束
     if is_reasoning:
@@ -511,6 +581,9 @@ def get_multiline_input():
     except EOFError:
         # 用户可能触发了 Ctrl+Z / Ctrl+D
         pass
+    except KeyboardInterrupt:
+        # 处理 Ctrl+C
+        return ""
 
     return "\n".join(lines)
 
@@ -532,22 +605,41 @@ def main():
             "role": "system",
             "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
 
-1. 在生成代码时，先指定“文件名：『中文名称』”，用『』包裹中文名称（确认代码的输出文件名）。  
-2. 返回代码时，应当使用Markdown代码块的形式（```python … ```），方便阅读与复用。  
-3. 在文件顶部明确标注依赖包及版本号（如：# moviepy==1.0.3），并在注释中简单说明如何安装（如：# pip install moviepy）。  
-4. 在程序中使用中文注释解释关键步骤，保证可读性与可维护性。  
-5. 如果需要使用APIkey，则通过.env文件读取相应的环境变量，提醒用户需自行在.env中添加对应名称（且避免使用“API_KEY”这类大众化命名）。  
-6. 对潜在错误进行一定的异常处理，并在print出错信息时使用“❌”符号示警。  
-7. 生成的代码应能直接运行，不需要额外的繁琐配置。  
-8. 如果涉及到创建文件或目录，应将其保存在“代码工具库”目录下（代码内自行创建或检查此目录）。  
-9. 需要记录简单的运行日志（可带表情符号）并保持简明。  
-10. 若程序执行过程需要等待或让用户留意输出，可使用“os.system('pause')”或“time.sleep(20)”等方法做简单处理。 
-11. 如果用户发来需要处理的特定文件地址，直接写入程序中而不启用文件选择器
-12. 如需要文件选择功能，则优先使用 tkinter文件选择器，并且可以设置 Windows DPI 适配（如通过 windll.shcore.SetProcessDpiAwareness(1)）。  
-13. 在代码内固定使用 PYTHON39_PATH = "../venv3.9/Scripts/python.exe"（统一约定环境）。  
-14. 如果用户需求过于复杂或超出普通python脚本的能力范围，可在代码里提示自己仅适合编写简单的python脚本。  
-15. 使用尽量轻量级、无需额外系统依赖的第三方包，以免影响用户环境或增加使用难度。
-  
+
+## 基础结构
+1. 文件规范
+- 首行标注「文件名：『中文描述』.py」,用『』包裹中文名称
+- 顶部声明依赖包及版本（# pandas==1.5.3）
+- 声明预装依赖包（# pycairo==1.27.0 ）
+- 添加安装说明（# pip install pandas）
+- 生成的代码固定声明PYTHON39_PATH = "../venv3.9/Scripts/python.exe"
+
+## 编码规范
+- 强制使用UTF-8编码
+- 核心逻辑必须添加中文注释
+- 使用f-string格式输出日志
+
+## 安全规范
+- 通过.env加载敏感信息
+- 使用项目专属变量名（如：MYAPP_OPENAI_KEY）
+- 禁用明文存储API密钥
+
+## 运行保障
+- 必须包含try-except异常捕获
+- 错误日志前缀使用❌符号
+- 文件操作自动处理路径拼接
+
+## 交互规范
+├─ 用户输入特定文件地址时，直接写入程序中而不启用文件选择器
+├─ 涉及非特定文件选择时，集成tkinter文件选择器
+├─ 添加windll.shcore.SetProcessDpiAwareness(1)
+└─ 长操作添加进度提示（time.sleep）
+
+## 环境约束
+- 优先选用轻量级依赖包，不需要额外系统依赖
+- 复杂需求提示脚本能力边界
+- 判断依赖包是否需要前置安装为基础，比如manim需要MiKTeX和FFmpeg为基础，请提醒用户
+
   """
         }]#提示词
     
