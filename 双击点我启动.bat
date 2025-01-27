@@ -84,7 +84,7 @@ if errorlevel 1 (
     cls
 )
 
-:: 运行Python脚本（不显示启动信息）
+:: 运行Python脚本（显示启动命令）
 "%VENV_PYTHON%" "%SCRIPT_PATH%"
 
 :: 如果发生错误则暂停
