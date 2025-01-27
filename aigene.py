@@ -166,7 +166,8 @@ def extract_imports(code_content):
         comment_pattern = r'#\s*([a-zA-Z0-9_-]+)==([0-9.]+)'
         comment_deps = re.findall(comment_pattern, code_content)
         for lib, version in comment_deps:
-            if lib and version:  # 确保包名和版本号都不为空
+            # 检查是否为标准库
+            if lib and version and lib not in STANDARD_LIBS:  
                 imports.add(f"{lib}=={version}")
 
         # 从导入语句中提取依赖
@@ -197,20 +198,28 @@ def extract_imports(code_content):
         console.print("\n[red]⚠️ 代码解析错误，无法提取依赖[/red]")
     
     # 调试输出
-    console.print("\n[yellow]检测到的依赖：[/yellow]")
-    for dep in imports:
-        console.print(f"[blue]- {dep}[/blue]")
+    if imports:
+        console.print("\n[yellow]检测到的依赖：[/yellow]")
+        for dep in imports:
+            console.print(f"[blue]- {dep}[/blue]")
     
     return imports
 
 def is_installed(lib_name):
     """检查库是否已安装"""
     try:
+        # 如果是标准库，直接返回 True
+        if lib_name in STANDARD_LIBS:
+            return True
+            
+        # 处理带版本号的包名
+        package_name = lib_name.split('==')[0] if '==' in lib_name else lib_name
+        
         # 获取虚拟环境Python解释器路径
         python_path = setup_virtual_env()
         # 使用虚拟环境的Python检查包是否已安装
         result = subprocess.run(
-            [python_path, "-c", f"import {lib_name}"],
+            [python_path, "-c", f"import {package_name}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -609,8 +618,8 @@ def main():
 ## 基础结构
 1. 文件规范
 - 首行标注「文件名：『中文描述』.py」,用『』包裹中文名称
-- 顶部声明依赖包及版本（# pandas==1.5.3）
-- 声明预装依赖包（# pycairo==1.27.0 ）
+- 顶部声明依赖包（# pandas）
+- 声明依赖包的前置预装依赖包（# pycairo ）
 - 添加安装说明（# pip install pandas）
 - 生成的代码固定声明PYTHON39_PATH = "../venv3.9/Scripts/python.exe"
 
@@ -632,6 +641,7 @@ def main():
 ## 交互规范
 ├─ 用户输入特定文件地址时，直接写入程序中而不启用文件选择器
 ├─ 涉及非特定文件选择时，集成tkinter文件选择器
+├─ 使用tkinter时，确保窗口内容显示完全
 ├─ 添加windll.shcore.SetProcessDpiAwareness(1)
 └─ 长操作添加进度提示（time.sleep）
 
