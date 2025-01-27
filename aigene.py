@@ -648,18 +648,35 @@ def main():
 ## 基础结构
 1. 代码块格式（必须严格遵守）
 - 代码块内容必须按以下格式编写：
-文件名：『中文命名』.py
+文件名：『中文命名』.py  需要用『』包裹
 ```
 # 依赖包：xxx
 # 前置预装依赖包：xxx
 # pip install xxx
 # 是否需要处理中文字符：是
 
-import语句
+import os
+import sys
 
-PYTHON39_PATH = "../venv3.9/Scripts/python.exe"
+# 在导入其他包之前，确保使用正确的Python环境
+def ensure_correct_python():
+    #确保使用正确的Python环境
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    python_path = os.path.join(os.path.dirname(current_dir), "venv3.9", "Scripts", "python.exe")
+    
+    if os.path.exists(python_path) and sys.executable.lower() != python_path.lower():
+        print(f"正在切换到正确的Python环境...")
+        os.execv(python_path, [python_path] + sys.argv)
 
-代码内容
+# 先执行环境切换
+if __name__ == "__main__":
+    ensure_correct_python()
+
+# 在确保环境正确后，再导入其他包
+import glob
+from datetime import datetime
+
+其余代码内容
 ```
 
 2. 代码规范
