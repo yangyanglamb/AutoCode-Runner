@@ -668,8 +668,8 @@ def save_and_execute_code(code_content, execute=True):
             console.print("1. 先安装代码注释中提到的系统级依赖")
             console.print("2. 关闭当前终端")
             console.print("3. 重新运行本程序")
-            
-            # 先生成文件
+        
+            # 先生成文件。
             if suggested_filename:
                 if not suggested_filename.endswith('.py'):
                     suggested_filename += '.py'
