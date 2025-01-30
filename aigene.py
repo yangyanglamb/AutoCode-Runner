@@ -16,6 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.console import Console
 from rich.panel import Panel
 import json
+import requests  # 添加requests导入
 
 # 环境配置
 PYTHON_MIN_VERSION = (3, 7)  # 保持原来的最低版本要求
@@ -694,7 +695,7 @@ def save_and_execute_code(code_content, execute=True):
             
             return True
 
-        # 如果不需要系统级依赖，则继续安装Python依赖并执行.
+        # 如果不需要系统级依赖，则继续安装Python依赖并执行
         required_libs = [
             lib for lib in extract_imports(code_content)
             if not is_installed(lib)
@@ -901,9 +902,55 @@ def get_multiline_input():
 
     return "\n".join(lines)
 
+def check_for_updates():
+    """检查程序更新"""
+    try:
+        # 导入版本检查模块（修正导入路径）
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from 版本检查更新 import get_local_version, check_update, download_and_update
+        
+        # 获取本地版本
+        local_version = get_local_version()
+        console.print(f"\n[cyan]当前版本: {local_version}[/cyan]")
+
+        # 检查更新
+        console.print("[yellow]正在检查更新...[/yellow]")
+        update_info = check_update()
+        
+        if update_info is None:
+            return
+        
+        if not update_info["has_update"]:
+            console.print("[green]✅ 已是最新版本[/green]")
+            return
+            
+        console.print(f"\n[yellow]发现新版本: {update_info['current_version']}[/yellow]")
+        
+        # 询问用户是否更新
+        while True:
+            console.print("\n是否更新到最新版本？(y/n): ", end="")
+            choice = input().lower().strip()
+            if choice in ['y', 'yes']:
+                if download_and_update():
+                    # 更新成功后退出程序
+                    console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
+                    sys.exit(0)
+                break
+            elif choice in ['n', 'no']:
+                console.print("[yellow]已取消更新[/yellow]")
+                break
+            else:
+                console.print("[red]无效的输入，请输入 y 或 n[/red]")
+
+    except Exception as e:
+        console.print(f"\n[red]❌ 检查更新失败: {str(e)}[/red]")
+
 def main():
     try:
         global current_client_type, client
+        
+        # 检查程序更新
+        check_for_updates()
         
         # 检查是否有待安装的依赖
         check_pending_dependencies()
