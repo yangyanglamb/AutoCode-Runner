@@ -694,7 +694,7 @@ def save_and_execute_code(code_content, execute=True):
             
             return True
 
-        # 如果不需要系统级依赖，则继续安装Python依赖并执行
+        # 如果不需要系统级依赖，则继续安装Python依赖并执行。
         required_libs = [
             lib for lib in extract_imports(code_content)
             if not is_installed(lib)
