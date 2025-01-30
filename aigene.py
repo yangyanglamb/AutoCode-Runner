@@ -15,6 +15,7 @@ import openai
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.console import Console
 from rich.panel import Panel
+import json
 
 # 环境配置
 PYTHON_MIN_VERSION = (3, 7)  # 保持原来的最低版本要求
@@ -33,27 +34,46 @@ load_dotenv()
 # 初始化Rich控制台
 console = Console()
 
+# 定义客户端类型
+DEEPSEEK_CLIENT = 0
+QWEN_CLIENT = 1
+current_client_type = 0  # 修改这里的值来切换默认客户端: DEEPSEEK_CLIENT(0) 或 QWEN_CLIENT(1)
+
 try:
     # 获取API密钥
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise ValueError("未找到API密钥")
-        
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+    
     # 初始化 DeepSeek 客户端
-    client = openai.OpenAI(
-        api_key=api_key,
+    deepseek_client = openai.OpenAI(
+        api_key=deepseek_api_key,
         base_url="https://api.deepseek.com/v1"
     )
+    
+    # 初始化 通义千问 客户端
+    qwen_client = openai.OpenAI(
+        api_key=os.getenv("DASHSCOPE_API_KEY"),  # 直接从环境变量获取
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+    
+    # 根据当前客户端类型选择客户端
+    client = deepseek_client if current_client_type == DEEPSEEK_CLIENT else qwen_client
+    
 except ValueError as e:
-    console.print(f"\n[red]❌ {str(e)}[/red]")
-    console.print("[yellow]请在.env文件中添加正确的API key，格式如下：[/yellow]")
-    console.print("[blue]DEEPSEEK_API_KEY=your_api_key_here[/blue]")
-    sys.exit(1)
+    if current_client_type == DEEPSEEK_CLIENT:
+        console.print(f"\n[red]❌ {str(e)}[/red]")
+        console.print("[yellow]请在.env文件中添加正确的API key，格式如下：[/yellow]")
+        console.print("[blue]DEEPSEEK_API_KEY=your_api_key_here[/blue]")
+        sys.exit(1)
+    else:
+        console.print(f"\n[red]❌ {str(e)}[/red]")
+        console.print("[yellow]请在.env文件中添加正确的API key，格式如下：[/yellow]")
+        console.print("[blue]DASHSCOPE_API_KEY=your_api_key_here[/blue]")
+        sys.exit(1)
 except (openai.AuthenticationError, TypeError) as e:
     console.print("\n[red]❌ API key(密钥)无效,请检查您的API key是否正确[/red]")
     console.print("\n[red]❌ to开发人员，也可能是|解释器|环境|依赖版本|问题[/red]")
     console.print("\n[yellow]当前API key值：[/yellow]")
-    console.print(f"[blue]{api_key}[/blue]")
+    console.print(f"[blue]{deepseek_api_key if current_client_type == DEEPSEEK_CLIENT else os.getenv('DASHSCOPE_API_KEY')}[/blue]")
     console.print("\n[yellow]原始错误信息：[/yellow]")
     console.print(f"[red]{type(e).__name__}: {str(e)}[/red]")
 
@@ -114,7 +134,9 @@ class StreamPrinter:
             
             # 首次输出时添加前缀
             if self.is_first_chunk:
-                console.print("\n[cyan]DeepSeek:[/cyan] ", end="")
+                # 根据当前客户端类型选择显示的角色名
+                role_name = "千问" if current_client_type == QWEN_CLIENT else "DeepSeek"
+                console.print(f"\n[cyan]{role_name}:[/cyan] ", end="")
                 self.is_first_chunk = False
             
             while self.buffer:
@@ -320,6 +342,109 @@ def generate_requirements():
         for package, version in required_packages.items():
             f.write(f"{package}=={version}\n")
 
+def check_special_dependencies(required_libs):
+    """检查是否包含需要特殊处理的依赖包"""
+    special_deps = {
+        'manim': {
+            'system_deps': ['MiKTeX', 'FFmpeg'],
+            'install_instructions': {
+                'MiKTeX': 'https://miktex.org/download',
+                'FFmpeg': 'https://ffmpeg.org/download.html'
+            }
+        },
+        'torch': {
+            'system_deps': ['CUDA（可选）'],
+            'install_instructions': {
+                'CUDA': 'https://developer.nvidia.com/cuda-downloads'
+            }
+        },
+        'tensorflow': {
+            'system_deps': ['CUDA（可选）', 'cuDNN（可选）'],
+            'install_instructions': {
+                'CUDA': 'https://developer.nvidia.com/cuda-downloads',
+                'cuDNN': 'https://developer.nvidia.com/cudnn'
+            }
+        },
+        'opencv-python': {
+            'system_deps': ['Visual C++ Redistributable'],
+            'install_instructions': {
+                'Visual C++': 'https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist'
+            }
+        },
+        'mysqlclient': {
+            'system_deps': ['MySQL', 'Visual C++ Build Tools'],
+            'install_instructions': {
+                'MySQL': 'https://dev.mysql.com/downloads/installer/',
+                'Visual C++ Build Tools': 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'
+            }
+        },
+        'psycopg2': {
+            'system_deps': ['PostgreSQL', 'Visual C++ Build Tools'],
+            'install_instructions': {
+                'PostgreSQL': 'https://www.postgresql.org/download/',
+                'Visual C++ Build Tools': 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'
+            }
+        },
+        'pygame': {
+            'system_deps': ['SDL', 'Visual C++ Redistributable'],
+            'install_instructions': {
+                'SDL': 'https://www.libsdl.org/download-2.0.php',
+                'Visual C++': 'https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist'
+            }
+        },
+        'kivy': {
+            'system_deps': ['Visual C++ Build Tools', 'SDL2', 'GLEW'],
+            'install_instructions': {
+                'Visual C++ Build Tools': 'https://visualstudio.microsoft.com/visual-cpp-build-tools/',
+                'SDL2': 'https://www.libsdl.org/download-2.0.php',
+                'GLEW': 'http://glew.sourceforge.net/'
+            }
+        },
+        'pycairo': {
+            'system_deps': ['Cairo Graphics'],
+            'install_instructions': {
+                'Cairo': 'https://www.cairographics.org/download/'
+            }
+        },
+        'python-ldap': {
+            'system_deps': ['OpenLDAP', 'Visual C++ Build Tools'],
+            'install_instructions': {
+                'OpenLDAP': 'https://www.openldap.org/software/download/',
+                'Visual C++ Build Tools': 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'
+            }
+        },
+        'pyaudio': {
+            'system_deps': ['PortAudio'],
+            'install_instructions': {
+                'PortAudio': 'http://www.portaudio.com/download.html'
+            }
+        },
+        'moviepy': {
+            'system_deps': ['FFmpeg'],
+            'install_instructions': {
+                'FFmpeg': 'https://ffmpeg.org/download.html'
+            }
+        }
+    }
+    
+    needs_special_handling = False
+    special_instructions = []
+    
+    for lib in required_libs:
+        lib_name = lib.split('==')[0] if '==' in lib else lib
+        if lib_name in special_deps:
+            needs_special_handling = True
+            deps_info = special_deps[lib_name]
+            
+            special_instructions.append(f"\n[yellow]检测到 {lib_name} 需要以下系统级依赖：[/yellow]")
+            for dep in deps_info['system_deps']:
+                special_instructions.append(f"- {dep}")
+            special_instructions.append("\n[blue]安装链接：[/blue]")
+            for dep, url in deps_info['install_instructions'].items():
+                special_instructions.append(f"- {dep}: {url}")
+    
+    return needs_special_handling, special_instructions
+
 def install_dependencies(required_libs):
     """安装依赖"""
     if not required_libs:
@@ -339,36 +464,80 @@ def install_dependencies(required_libs):
         
         for lib in required_libs:
             installed = False
-            for mirror in mirrors:
+            lib_name = lib.split('==')[0] if '==' in lib else lib
+            
+            # 对manim进行特殊处理
+            if lib_name == 'manim':
                 try:
-                    # 使用虚拟环境的pip安装
-                    cmd = [python_path, "-m", "pip", "install", lib]
-                    if mirror:
-                        cmd.extend(["-i", mirror])
-                        console.print(f"[yellow]尝试使用下载源: {mirror}[/yellow]")
+                    # 先尝试安装依赖包
+                    pre_deps = ['numpy', 'pillow', 'scipy', 'matplotlib', 'tqdm', 'colour', 'pycairo']
+                    for dep in pre_deps:
+                        subprocess.run(
+                            [python_path, "-m", "pip", "install", dep, "-i", mirrors[0]],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=300
+                        )
                     
-                    result = subprocess.run(
-                        cmd,
-                        stdout=None,  # 直接输出到控制台
-                        stderr=None,  # 直接输出到控制台
-                        text=True,
-                        timeout=300  # 5分钟超时
-                    )
-                    
-                    if result.returncode == 0:
-                        # 显示不带版本号的包名
-                        lib_name = lib.split('==')[0] if '==' in lib else lib
-                        console.print(f"[green]✅ {lib_name}[/green]")
-                        installed = True
-                        break
-                        
-                except subprocess.TimeoutExpired:
-                    continue
+                    # 然后尝试安装manim
+                    for mirror in mirrors:
+                        try:
+                            cmd = [python_path, "-m", "pip", "install", "--no-deps", lib]
+                            if mirror:
+                                cmd.extend(["-i", mirror])
+                            console.print(f"[yellow]正在安装 {lib_name}...[/yellow]")
+                            
+                            result = subprocess.run(
+                                cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                timeout=300
+                            )
+                            
+                            if result.returncode == 0:
+                                console.print(f"[green]✅ {lib_name}[/green]")
+                                installed = True
+                                break
+                        except Exception:
+                            continue
                 except Exception as e:
-                    continue
+                    console.print(f"[red]安装 {lib_name} 时出错: {str(e)}[/red]")
+            else:
+                # 其他包使用常规安装方式
+                for mirror in mirrors:
+                    try:
+                        cmd = [python_path, "-m", "pip", "install", lib]
+                        if mirror:
+                            cmd.extend(["-i", mirror])
+                            console.print(f"[yellow]尝试使用下载源: {mirror}[/yellow]")
+                        
+                        result = subprocess.run(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=300
+                        )
+                        
+                        if result.returncode == 0:
+                            console.print(f"[green]✅ {lib_name}[/green]")
+                            installed = True
+                            break
+                            
+                    except subprocess.TimeoutExpired:
+                        continue
+                    except Exception as e:
+                        continue
             
             if not installed:
                 failed_libs.append(lib)
+                if lib_name == 'manim':
+                    console.print("[yellow]提示：manim安装失败可能是因为：[/yellow]")
+                    console.print("1. 系统PATH中未正确添加MiKTeX和FFmpeg")
+                    console.print("2. 需要重启终端以使环境变量生效")
+                    console.print("3. 可以尝试手动执行: pip install manim")
             
             progress.update(install_task, advance=1)
     
@@ -377,6 +546,92 @@ def install_dependencies(required_libs):
         return False
                 
     return True
+
+def check_system_dependencies(code_content):
+    """检查是否需要系统级依赖"""
+    # 检查是否包含系统级依赖标记
+    system_dep_pattern = r'#\s*是否需要提前安装除以上的其它依赖\s*[：:]\s*是'
+    return bool(re.search(system_dep_pattern, code_content))
+
+def save_pending_dependencies(filename, required_libs):
+    """保存待安装的依赖信息"""
+    pending_file = "pending_dependencies.json"
+    data = {
+        "filename": filename,
+        "required_libs": list(required_libs),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    try:
+        with open(pending_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        console.print(f"[yellow]⚠️ 保存待安装依赖信息失败: {str(e)}[/yellow]")
+
+def check_pending_dependencies():
+    """检查是否有待安装的依赖"""
+    pending_file = "pending_dependencies.json"
+    if not os.path.exists(pending_file):
+        return
+        
+    try:
+        with open(pending_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        filename = data.get("filename")
+        required_libs = data.get("required_libs", [])
+        timestamp = data.get("timestamp")
+        
+        if not filename or not required_libs:
+            os.remove(pending_file)
+            return
+            
+        console.print(f"\n[yellow]检测到上次有未完成的依赖安装[/yellow]")
+        console.print(f"[blue]文件: {filename}[/blue]")
+        console.print(f"[blue]时间: {timestamp}[/blue]")
+        console.print("[blue]待安装依赖:[/blue]")
+        for lib in required_libs:
+            console.print(f"- {lib}")
+            
+        while True:
+            console.print("\n[yellow]是否现在安装这些依赖？(y/n)[/yellow]")
+            choice = input().strip().lower()
+            if choice in ('y', 'yes'):
+                # 记录原始依赖列表
+                original_libs = required_libs.copy()
+                
+                # 尝试安装依赖
+                if install_dependencies(required_libs):
+                    console.print("[green]✅ 所有依赖安装成功[/green]")
+                    os.remove(pending_file)
+                    
+                    # 询问是否立即运行代码
+                    console.print("\n[yellow]是否立即运行该代码？(y/n)[/yellow]")
+                    run_choice = input().strip().lower()
+                    if run_choice in ('y', 'yes'):
+                        with open(filename, "r", encoding="utf-8") as f:
+                            code_content = f.read()
+                        save_and_execute_code((code_content, os.path.basename(filename)), True)
+                else:
+                    # 检查哪些依赖安装成功了
+                    remaining_libs = [lib for lib in original_libs if not is_installed(lib)]
+                    if len(remaining_libs) < len(original_libs):
+                        # 更新JSON文件，只保留未安装成功的依赖
+                        data["required_libs"] = remaining_libs
+                        with open(pending_file, "w", encoding="utf-8") as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                        console.print(f"[yellow]已更新待安装依赖列表，剩余 {len(remaining_libs)} 个依赖需要安装[/yellow]")
+                    console.print("[red]❌ 部分依赖安装失败[/red]")
+                break
+            elif choice in ('n', 'no'):
+                console.print("[yellow]已取消安装[/yellow]")
+                break
+            else:
+                console.print("[red]无效的输入，请输入 y 或 n[/red]")
+                
+    except Exception as e:
+        console.print(f"[red]❌ 检查待安装依赖时出错: {str(e)}[/red]")
+        if os.path.exists(pending_file):
+            os.remove(pending_file)
 
 def save_and_execute_code(code_content, execute=True):
     """保存并执行代码"""
@@ -392,39 +647,42 @@ def save_and_execute_code(code_content, execute=True):
         else:
             suggested_filename = None
 
-        # 先生成文件
-        if suggested_filename:
-            if not suggested_filename.endswith('.py'):
-                suggested_filename += '.py'
-            filename = os.path.join(code_dir, suggested_filename)
-        else:
-            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+        # 检查是否需要系统级依赖
+        needs_system_deps = check_system_dependencies(code_content)
+        if needs_system_deps:
+            console.print("\n[yellow]⚠️ 检测到此代码需要额外的系统级依赖[/yellow]")
+            console.print("[yellow]请按以下步骤操作：[/yellow]")
+            console.print("1. 先安装代码注释中提到的系统级依赖")
+            console.print("2. 关闭当前终端")
+            console.print("3. 重新运行本程序")
+            console.print("4. 使用's'或'run'命令重新运行此代码")
             
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(code_content)
+            # 先生成文件
+            if suggested_filename:
+                if not suggested_filename.endswith('.py'):
+                    suggested_filename += '.py'
+                filename = os.path.join(code_dir, suggested_filename)
+            else:
+                filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+                
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(code_content)
+                
+            # 提取并保存待安装的依赖信息
+            required_libs = [
+                lib for lib in extract_imports(code_content)
+                if not is_installed(lib)
+            ]
+            if required_libs:
+                save_pending_dependencies(filename, required_libs)
+                
+            # 显示保存路径
+            abs_path = os.path.abspath(filename)
+            console.print(f"\n[blue]💾 代码保存路径: [cyan]{abs_path}[/cyan][/blue]")
             
-        abs_path = os.path.abspath(filename)
-        # 获取文件所在目录路径
-        dir_path = os.path.dirname(abs_path)
-        
-        # 打印保存路径
-        console.print(f"\n[blue]💾 代码保存路径: [cyan]{abs_path}[/cyan][/blue]")
-        
-        # 直接打开文件夹
-        try:
-            if sys.platform == "win32":
-                os.startfile(dir_path)
-            elif sys.platform == "darwin":  # macOS
-                subprocess.run(['open', dir_path])
-            else:  # Linux
-                subprocess.run(['xdg-open', dir_path])
-        except Exception as e:
-            console.print(f"[yellow]⚠️ 无法自动打开文件夹: {str(e)}[/yellow]")
-
-        if not execute:
             return True
 
-        # 再检测和安装依赖
+        # 如果不需要系统级依赖，则继续安装Python依赖并执行
         required_libs = [
             lib for lib in extract_imports(code_content)
             if not is_installed(lib)
@@ -485,6 +743,10 @@ def chat_stream(messages, printer, model="deepseek-chat"):
     
     while retry_count < max_retries:
         try:
+            # 根据当前客户端类型选择模型
+            if current_client_type == QWEN_CLIENT:
+                model = "qwen-max-2025-01-25"
+            
             # 直接创建聊天完成并流式输出
             for chunk in client.chat.completions.create(
                 model=model,  # 使用指定的模型
@@ -629,18 +891,25 @@ def get_multiline_input():
 
 def main():
     try:
-        # 环境检查
-        check_python_version()
+        global current_client_type, client
         
-        # 生成requirements.txt
-        if not os.path.exists(REQUIREMENTS_FILE):
-            generate_requirements()
+        # 检查是否有待安装的依赖
+        check_pending_dependencies()
         
-        # 设置虚拟环境
-        setup_virtual_env()
+        # 环境检查 - 只在DeepSeek模式下进行
+        if current_client_type == DEEPSEEK_CLIENT:
+            check_python_version()
+            
+            # 生成requirements.txt
+            if not os.path.exists(REQUIREMENTS_FILE):
+                generate_requirements()
+            
+            # 设置虚拟环境
+            setup_virtual_env()
         
         printer = StreamPrinter()
-        current_model = "deepseek-chat"  # 默认模型
+        current_model = "deepseek-chat" if current_client_type == DEEPSEEK_CLIENT else "qwen-max-2025-01-25"  # 默认模型
+        #提示词
         messages = [{
             "role": "system",
             "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
@@ -654,6 +923,7 @@ def main():
 # 前置预装依赖包：xxx
 # pip install xxx
 # 是否需要处理中文字符：是
+# 是否需要提前安装除以上的其它依赖：是
 
 import os
 import sys
@@ -708,13 +978,17 @@ from datetime import datetime
 ## 环境约束
 - 优先选用轻量级依赖包，不需要额外系统依赖
 - 复杂需求提示脚本能力边界
-- 判断依赖包是否需要前置安装为基础，比如manim需要MiKTeX和FFmpeg为基础，请提醒用户
+- 注意：如果需要安装系统级依赖（如MiKTeX、FFmpeg等），请提示用户：
+1. 先安装所需的系统级依赖
+2. 关闭当前终端
+3. 重新运行本程序
+这样才能确保系统级依赖生效
 """
         }]
     
-        
+        # 修改面板显示内容，移除客户端切换选项
         console.print(Panel.fit(
-            "[bold yellow]DeepSeek 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
+            "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
             border_style="blue"
         ))
         
@@ -725,15 +999,17 @@ from datetime import datetime
                 # 忽略空输入
                 if not user_input:
                     continue
-                # 处理模型切换
-                if user_input == "r":
-                    current_model = "deepseek-reasoner"
-                    console.print(f"\n[cyan]已切换到 [bright_blue]{current_model}[/bright_blue] 模型[/cyan]")
-                    continue
-                elif user_input == "c":
-                    current_model = "deepseek-chat"
-                    console.print(f"\n[cyan]已切换到 {current_model} 模型[/cyan]")
-                    continue
+                    
+                # 处理模型切换 - 只在DeepSeek模式下有效
+                if current_client_type == DEEPSEEK_CLIENT:
+                    if user_input == "r":
+                        current_model = "deepseek-reasoner"
+                        console.print(f"\n[cyan]已切换到 [bright_blue]{current_model}[/bright_blue] 模型[/cyan]")
+                        continue
+                    elif user_input == "c":
+                        current_model = "deepseek-chat"
+                        console.print(f"\n[cyan]已切换到 {current_model} 模型[/cyan]")
+                        continue
                 
                 # 处理保存和执行上次代码的命令
                 if user_input == "s" or user_input == "run":
