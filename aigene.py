@@ -934,6 +934,8 @@ def check_for_updates():
                 if download_and_update():
                     # 更新成功后退出程序
                     console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
+                    console.print("[yellow]10秒后自动退出...[/yellow]")
+                    time.sleep(10)
                     sys.exit(0)
                 break
             elif choice in ['n', 'no']:

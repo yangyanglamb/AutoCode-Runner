@@ -9,6 +9,7 @@ import shutil
 import zipfile
 import requests
 from pathlib import Path
+from datetime import datetime
 
 # 在导入其他包之前，确保使用正确的Python环境
 def ensure_correct_python():
@@ -59,7 +60,7 @@ def download_and_update():
     """下载并更新程序"""
     try:
         # 获取项目根目录
-        root_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         # 下载更新包
         print("正在下载更新...")
@@ -91,15 +92,25 @@ def download_and_update():
 
         # 复制更新文件
         def copy_files(src_dir, dst_dir):
+            # 获取当前运行的Python文件的绝对路径
+            current_file = os.path.abspath(__file__)
+            aigene_file = os.path.join(root_dir, "aigene.py")
+            
             for item in os.listdir(src_dir):
                 src_path = os.path.join(src_dir, item)
                 dst_path = os.path.join(dst_dir, item)
                 
                 if os.path.isfile(src_path):
+                    # 跳过当前正在运行的文件
+                    if os.path.abspath(dst_path) in [current_file, aigene_file]:
+                        print(f"跳过更新正在运行的文件: {item}")
+                        continue
+                        
                     # 如果目标文件存在，先删除
                     if os.path.exists(dst_path):
                         os.remove(dst_path)
                     shutil.copy2(src_path, dst_path)
+                    print(f"更新文件: {item}")
                 elif os.path.isdir(src_path):
                     if not os.path.exists(dst_path):
                         os.makedirs(dst_path)
@@ -109,20 +120,72 @@ def download_and_update():
         print("正在更新文件...")
         copy_files(extract_dir, root_dir)
 
-        # 清理临时文件
-        print("正在清理临时文件...")
-        shutil.rmtree(temp_dir)
+        # 将正在运行的文件标记为待更新
+        pending_update_file = os.path.join(root_dir, "pending_update.json")
+        pending_files = {
+            "files": [
+                os.path.relpath(__file__, root_dir),
+                "aigene.py"
+            ],
+            "source_dir": extract_dir,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        with open(pending_update_file, "w", encoding="utf-8") as f:
+            json.dump(pending_files, f, ensure_ascii=False, indent=2)
 
+        # 清理临时文件（保留解压目录供后续更新）
+        os.remove(update_zip)
+        
         print("✅ 更新完成！")
+        print("注意：部分核心文件将在程序重启后完成更新")
         return True
 
     except Exception as e:
         print(f"❌ 更新过程中发生错误: {e}")
         return False
 
+def check_pending_updates():
+    """检查是否有待更新的文件"""
+    try:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pending_update_file = os.path.join(root_dir, "pending_update.json")
+        
+        if not os.path.exists(pending_update_file):
+            return
+            
+        with open(pending_update_file, "r", encoding="utf-8") as f:
+            pending_files = json.load(f)
+            
+        source_dir = pending_files.get("source_dir")
+        if not source_dir or not os.path.exists(source_dir):
+            os.remove(pending_update_file)
+            return
+            
+        # 更新待更新的文件
+        for file in pending_files["files"]:
+            src_path = os.path.join(source_dir, file)
+            dst_path = os.path.join(root_dir, file)
+            
+            if os.path.exists(src_path):
+                # 如果目标文件存在，先删除
+                if os.path.exists(dst_path):
+                    os.remove(dst_path)
+                shutil.copy2(src_path, dst_path)
+                print(f"完成更新文件: {file}")
+                
+        # 清理临时文件和标记文件
+        shutil.rmtree(os.path.dirname(source_dir))
+        os.remove(pending_update_file)
+        
+    except Exception as e:
+        print(f"❌ 处理待更新文件时出错: {e}")
+
 def main():
     """主函数"""
     try:
+        # 检查并处理待更新的文件
+        check_pending_updates()
+        
         # 获取本地版本
         local_version = get_local_version()
         print(f"当前版本: {local_version}")
