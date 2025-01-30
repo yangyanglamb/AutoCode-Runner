@@ -342,15 +342,15 @@ def install_dependencies(required_libs):
             for mirror in mirrors:
                 try:
                     # 使用虚拟环境的pip安装
-                    cmd = [python_path, "-m", "pip", "install", lib, "--quiet"]
+                    cmd = [python_path, "-m", "pip", "install", lib]
                     if mirror:
                         cmd.extend(["-i", mirror])
                         console.print(f"[yellow]尝试使用下载源: {mirror}[/yellow]")
                     
                     result = subprocess.run(
                         cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        stdout=None,  # 直接输出到控制台
+                        stderr=None,  # 直接输出到控制台
                         text=True,
                         timeout=300  # 5分钟超时
                     )
@@ -648,7 +648,7 @@ def main():
 ## 基础结构
 1. 代码块格式（必须严格遵守）
 - 代码块内容必须按以下格式编写：
-文件名：『中文命名』.py  『』包裹名称，“.py”在外围
+文件名：『中文命名』.py  『』包裹名称，".py"在外围
 ```
 # 依赖包：xxx
 # 前置预装依赖包：xxx
