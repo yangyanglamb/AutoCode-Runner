@@ -574,8 +574,17 @@ def check_pending_dependencies():
         return
         
     try:
+        # 先读取文件内容
         with open(pending_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            content = f.read().strip()
+            
+        # 如果文件为空，直接删除并返回
+        if not content:
+            os.remove(pending_file)
+            return
+            
+        # 解析JSON内容
+        data = json.loads(content)
             
         filename = data.get("filename")
         required_libs = data.get("required_libs", [])
@@ -628,6 +637,10 @@ def check_pending_dependencies():
             else:
                 console.print("[red]无效的输入，请输入 y 或 n[/red]")
                 
+    except json.JSONDecodeError:
+        # JSON解析错误，说明文件格式不正确
+        console.print("[yellow]⚠️ 依赖信息文件格式不正确，正在重置...[/yellow]")
+        os.remove(pending_file)
     except Exception as e:
         console.print(f"[red]❌ 检查待安装依赖时出错: {str(e)}[/red]")
         if os.path.exists(pending_file):
@@ -655,7 +668,6 @@ def save_and_execute_code(code_content, execute=True):
             console.print("1. 先安装代码注释中提到的系统级依赖")
             console.print("2. 关闭当前终端")
             console.print("3. 重新运行本程序")
-            console.print("4. 使用's'或'run'命令重新运行此代码")
             
             # 先生成文件
             if suggested_filename:
