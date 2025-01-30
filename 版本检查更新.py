@@ -188,17 +188,13 @@ def main():
         
         # 获取本地版本
         local_version = get_local_version()
-        print(f"当前版本: {local_version}")
 
-        # 检查更新
-        print("正在检查更新...")
         update_info = check_update()
         
         if update_info is None:
             return
         
         if not update_info["has_update"]:
-            print("✅ 已是最新版本")
             return
             
         print(f"发现新版本: {update_info['current_version']}")

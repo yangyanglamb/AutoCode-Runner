@@ -911,17 +911,14 @@ def check_for_updates():
         
         # 获取本地版本
         local_version = get_local_version()
-        console.print(f"\n[cyan]当前版本: {local_version}[/cyan]")
 
-        # 检查更新
-        console.print("[yellow]正在检查更新...[/yellow]")
+        # 检查更新)
         update_info = check_update()
         
         if update_info is None:
             return
         
         if not update_info["has_update"]:
-            console.print("[green]✅ 已是最新版本[/green]")
             return
             
         console.print(f"\n[yellow]发现新版本: {update_info['current_version']}[/yellow]")
