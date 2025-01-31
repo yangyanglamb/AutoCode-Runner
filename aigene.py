@@ -912,34 +912,35 @@ def check_for_updates():
         # 获取本地版本
         local_version = get_local_version()
 
-        # 检查更新)
+        # 检查更新
         update_info = check_update()
         
         if update_info is None:
             return
-        
-        if not update_info["has_update"]:
-            return
             
-        console.print(f"\n[yellow]发现新版本: {update_info['current_version']}[/yellow]")
-        
-        # 询问用户是否更新
-        while True:
-            console.print("\n是否更新到最新版本？(y/n): ", end="")
-            choice = input().lower().strip()
-            if choice in ['y', 'yes']:
-                if download_and_update():
-                    # 更新成功后退出程序
-                    console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
-                    console.print("[yellow]10秒后自动退出...[/yellow]")
-                    time.sleep(10)
-                    sys.exit(0)
-                break
-            elif choice in ['n', 'no']:
-                console.print("[yellow]已取消更新[/yellow]")
-                break
-            else:
-                console.print("[red]无效的输入，请输入 y 或 n[/red]")
+        # 检查是否需要更新
+        if update_info["last_version"] != local_version:
+            console.print(f"\n[yellow]发现新版本[/yellow]")
+            console.print(f"[yellow]当前版本: {local_version}[/yellow]")
+            console.print(f"[yellow]最新版本: {update_info['current_version']}[/yellow]")
+            
+            # 询问用户是否更新
+            while True:
+                console.print("\n是否更新到最新版本？(y/n): ", end="")
+                choice = input().lower().strip()
+                if choice in ['y', 'yes']:
+                    if download_and_update():
+                        # 更新成功后退出程序
+                        console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
+                        console.print("[yellow]10秒后自动退出...[/yellow]")
+                        time.sleep(10)
+                        sys.exit(0)
+                    break
+                elif choice in ['n', 'no']:
+                    console.print("[yellow]已取消更新[/yellow]")
+                    break
+                else:
+                    console.print("[red]无效的输入，请输入 y 或 n[/red]")
 
     except Exception as e:
         console.print(f"\n[red]❌ 检查更新失败: {str(e)}[/red]")
