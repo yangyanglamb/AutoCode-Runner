@@ -521,20 +521,60 @@ def install_dependencies(required_libs):
                 # 其他包使用常规安装方式
                 for mirror in mirrors:
                     try:
-                        cmd = [python_path, "-m", "pip", "install", lib]
+                        # 添加 --prefer-binary 参数优先使用预编译包
+                        cmd = [
+                            python_path, 
+                            "-m", 
+                            "pip", 
+                            "install", 
+                            lib, 
+                            "--prefer-binary",  # 优先使用预编译的wheel包
+                            "--no-build-isolation",  # 加快构建速度
+                            "--verbose"
+                        ]
                         if mirror:
                             cmd.extend(["-i", mirror])
                             console.print(f"[yellow]尝试使用下载源: {mirror}[/yellow]")
                         
-                        result = subprocess.run(
+                        # 实时打印pip输出
+                        process = subprocess.Popen(
                             cmd,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             text=True,
-                            timeout=300
+                            bufsize=1,
+                            universal_newlines=True
                         )
                         
-                        if result.returncode == 0:
+                        # 使用线程来读取输出，避免阻塞
+                        def read_output(pipe, is_error=False):
+                            for line in pipe:
+                                line = line.strip()
+                                if line:
+                                    if "Installing build dependencies" in line:
+                                        console.print("[yellow]正在安装构建依赖，这可能需要几分钟...[/yellow]")
+                                    elif "Building wheels" in line:
+                                        console.print("[yellow]正在构建wheel包，这可能需要几分钟...[/yellow]")
+                                    else:
+                                        console.print(f"[{'red' if is_error else 'dim'}]{line}[/{'red' if is_error else 'dim'}]")
+
+                        # 创建并启动输出读取线程
+                        from threading import Thread
+                        stdout_thread = Thread(target=read_output, args=(process.stdout,))
+                        stderr_thread = Thread(target=read_output, args=(process.stderr, True))
+                        stdout_thread.daemon = True
+                        stderr_thread.daemon = True
+                        stdout_thread.start()
+                        stderr_thread.start()
+                        
+                        # 等待进程完成
+                        return_code = process.wait()
+                        
+                        # 等待输出读取完成
+                        stdout_thread.join()
+                        stderr_thread.join()
+                        
+                        if return_code == 0:
                             console.print(f"[green]✅ {lib_name}[/green]")
                             installed = True
                             break
@@ -542,6 +582,7 @@ def install_dependencies(required_libs):
                     except subprocess.TimeoutExpired:
                         continue
                     except Exception as e:
+                        console.print(f"[red]安装过程出错: {str(e)}[/red]")
                         continue
             
             if not installed:
@@ -951,7 +992,7 @@ def check_for_updates():
                     console.print("[yellow]已取消更新[/yellow]")
                     break
                 else:
-                    console.print("无效的输入，请输入 y 或 n")
+                    console.print("无效的输入，请输入 y(表示是) 或 n(表示否)")
             
     except Exception as e:
         console.print(f"\n[red]更新检查失败: {str(e)}[/red]")
@@ -962,6 +1003,89 @@ def clear_terminal():
         os.system("cls")
     else:
         os.system("clear")
+
+def list_and_run_code():
+    """列出代码工具库中的文件并允许选择运行"""
+    code_dir = "代码工具库"
+    if not os.path.exists(code_dir):
+        console.print("[yellow]⚠️ 代码工具库目录不存在[/yellow]")
+        return
+
+    # 获取所有.py文件
+    py_files = [f for f in os.listdir(code_dir) if f.endswith('.py')]
+    if not py_files:
+        console.print("[yellow]⚠️ 没有找到Python文件[/yellow]")
+        return
+
+    # 显示文件列表
+    console.print("\n[cyan]代码工具库文件列表：[/cyan]")
+    for i, file in enumerate(py_files, 1):
+        console.print(f"[blue]{i}.[/blue] {file}")
+
+    # 获取用户选择
+    while True:
+        try:
+            choice = input("\n请输入文件序号（按回车返回）: ").strip()
+            if not choice:  # 直接回车返回
+                return
+            
+            file_index = int(choice) - 1
+            if 0 <= file_index < len(py_files):
+                selected_file = os.path.join(code_dir, py_files[file_index])
+                
+                # 读取文件内容
+                with open(selected_file, 'r', encoding='utf-8') as f:
+                    code_content = f.read()
+                
+                # 提取并安装依赖
+                required_libs = extract_imports(code_content)
+                if required_libs:
+                    console.print("\n[yellow]正在检查依赖...[/yellow]")
+                    if not install_dependencies(required_libs):
+                        console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                        continue
+                
+                # 获取虚拟环境Python解释器
+                python_path = setup_virtual_env()
+                
+                # 执行代码
+                console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
+                try:
+                    if sys.platform == "win32":
+                        # Windows下使用相对路径执行Python文件
+                        venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
+                        if not os.path.exists(venv_python):
+                            console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
+                            return
+                        
+                        # 使用相对路径构建命令
+                        rel_python = os.path.relpath(venv_python)
+                        rel_filename = os.path.relpath(selected_file)
+                        cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
+                        subprocess.Popen(cmd, shell=True)
+                    else:
+                        if sys.platform == "darwin":  # macOS
+                            subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, selected_file])
+                        else:  # Linux
+                            terminals = ['gnome-terminal', 'xterm', 'konsole']
+                            for term in terminals:
+                                try:
+                                    subprocess.Popen([term, '--', python_path, selected_file])
+                                    break
+                                except FileNotFoundError:
+                                    continue
+                            else:
+                                # 如果没有找到图形终端，使用当前终端运行
+                                subprocess.Popen([python_path, selected_file])
+                except Exception as e:
+                    console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
+                break
+            else:
+                console.print("[red]❌ 无效的序号，请重新输入[/red]")
+        except ValueError:
+            console.print("[red]❌ 请输入有效的数字[/red]")
+        except Exception as e:
+            console.print(f"[red]❌ 发生错误: {str(e)}[/red]")
 
 def main():
     try:
@@ -990,7 +1114,7 @@ def main():
         def show_menu():
             """显示程序菜单"""
             console.print(Panel.fit(
-                "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | cl 清除记忆 | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
+                "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | cl 清除记忆 | list 列出并运行代码 | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
                 border_style="blue"
             ))
 
@@ -1090,6 +1214,11 @@ from datetime import datetime
                     show_menu()  # 重新显示菜单
                     console.print("[green]✓ 记忆已清除[/green]")
                     continue
+                
+                # 处理list命令
+                if user_input == "list":
+                    list_and_run_code()
+                    continue
 
                 # 处理模型切换 - 只在DeepSeek模式下有效
                 if current_client_type == DEEPSEEK_CLIENT:
@@ -1101,74 +1230,6 @@ from datetime import datetime
                         current_model = "deepseek-chat"
                         console.print(f"\n[cyan]已切换到 {current_model} 模型[/cyan]")
                         continue
-                
-                # 处理保存和执行上次代码的命令
-                if user_input == "s" or user_input == "run":
-                    # 从消息历史中获取上一次AI的回复
-                    if len(messages) >= 2 and messages[-1]["role"] == "assistant":
-                        last_response = messages[-1]["content"]
-                        code_result = extract_code_from_response(last_response)
-                        if code_result and code_result[0]:
-                            execute = user_input == "run"  # 如果是run命令则执行，s命令则只保存
-                            code_content, suggested_filename = code_result
-                            
-                            # 创建代码保存目录
-                            code_dir = "代码工具库"
-                            if not os.path.exists(code_dir):
-                                os.makedirs(code_dir)
-                                
-                            # 生成文件名
-                            if suggested_filename:
-                                if not suggested_filename.endswith('.py'):
-                                    suggested_filename += '.py'
-                                filename = os.path.join(code_dir, suggested_filename)
-                            else:
-                                filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
-                                
-                            # 保存代码
-                            with open(filename, "w", encoding="utf-8") as f:
-                                f.write(code_content)
-                                
-                            if execute:
-                                # 获取虚拟环境Python解释器
-                                python_path = setup_virtual_env()
-                                
-                                # 执行代码
-                                console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
-                                try:
-                                    if sys.platform == "win32":
-                                        # Windows下使用相对路径执行Python文件
-                                        venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
-                                        if not os.path.exists(venv_python):
-                                            console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
-                                            continue
-                                        
-                                        # 使用相对路径构建命令
-                                        rel_python = os.path.relpath(venv_python)
-                                        rel_filename = os.path.relpath(filename)
-                                        cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
-                                        subprocess.Popen(cmd, shell=True)
-                                    else:
-                                        if sys.platform == "darwin":  # macOS
-                                            subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
-                                        else:  # Linux
-                                            terminals = ['gnome-terminal', 'xterm', 'konsole']
-                                            for term in terminals:
-                                                try:
-                                                    subprocess.Popen([term, '--', python_path, filename])
-                                                    break
-                                                except FileNotFoundError:
-                                                    continue
-                                            else:
-                                                # 如果没有找到图形终端，使用当前终端运行
-                                                subprocess.Popen([python_path, filename])
-                                except Exception as e:
-                                    console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
-                            else:
-                                console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
-                            continue
-                    console.print("\n[yellow]⚠️ 没有找到上一次生成的代码[/yellow]")
-                    continue
                 
                 # 检查是否包含 -n 标志
                 execute_code = "-n" not in user_input
