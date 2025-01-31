@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 import json
 import requests  # 添加requests导入
-
+print("更新成功")
 # 环境配置
 PYTHON_MIN_VERSION = (3, 7)  # 保持原来的最低版本要求
 VENV_DIR = "venv3.9"  # 指定Python 3.9的虚拟环境目录
@@ -740,6 +740,22 @@ def save_and_execute_code(code_content, execute=True):
         else:
             suggested_filename = None
 
+        # 先生成文件名并保存代码
+        if suggested_filename:
+            if not suggested_filename.endswith('.py'):
+                suggested_filename += '.py'
+            filename = os.path.join(code_dir, suggested_filename)
+        else:
+            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+            
+        # 保存代码文件
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(code_content)
+            
+        # 显示保存路径
+        abs_path = os.path.abspath(filename)
+        console.print(f"\n[blue]💾 代码保存路径: [cyan]{abs_path}[/cyan][/blue]")
+
         # 检查是否需要系统级依赖
         needs_system_deps = check_system_dependencies(code_content)
         if needs_system_deps:
@@ -748,18 +764,7 @@ def save_and_execute_code(code_content, execute=True):
             console.print("1. 先安装代码注释中提到的系统级依赖")
             console.print("2. 关闭当前终端")
             console.print("3. 重新运行本程序")
-        
-            # 先生成文件
-            if suggested_filename:
-                if not suggested_filename.endswith('.py'):
-                    suggested_filename += '.py'
-                filename = os.path.join(code_dir, suggested_filename)
-            else:
-                filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
-                
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(code_content)
-                
+            
             # 提取并保存待安装的依赖信息
             required_libs = [
                 lib for lib in extract_imports(code_content)
@@ -768,34 +773,19 @@ def save_and_execute_code(code_content, execute=True):
             if required_libs:
                 save_pending_dependencies(filename, required_libs)
                 
-            # 显示保存路径
-            abs_path = os.path.abspath(filename)
-            console.print(f"\n[blue]💾 代码保存路径: [cyan]{abs_path}[/cyan][/blue]")
-            
             return True
 
-        # 如果不需要系统级依赖，则继续安装Python依赖并执行
+        # 如果不需要系统级依赖，则继续安装Python依赖
         required_libs = [
             lib for lib in extract_imports(code_content)
             if not is_installed(lib)
         ]
         
-        # 先保存代码
-        if suggested_filename:
-            if not suggested_filename.endswith('.py'):
-                suggested_filename += '.py'
-            filename = os.path.join(code_dir, suggested_filename)
-        else:
-            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
-            
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(code_content)
-        
-        # 如果有依赖且安装失败，保存依赖信息并退出
+        # 如果有依赖且安装失败，保存依赖信息
         if required_libs and not install_dependencies(required_libs):
             console.print("\n[red]⚠️ 部分依赖安装失败,代码可能无法正常运行[/red]")
             save_pending_dependencies(filename, required_libs)
-            return False
+            return True  # 返回True因为文件已经保存
 
         if execute:
             # 获取虚拟环境Python解释器
@@ -809,7 +799,7 @@ def save_and_execute_code(code_content, execute=True):
                     venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
                     if not os.path.exists(venv_python):
                         console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
-                        return False
+                        return True  # 返回True因为文件已经保存
                     
                     # 使用相对路径构建命令
                     rel_python = os.path.relpath(venv_python)
@@ -832,12 +822,10 @@ def save_and_execute_code(code_content, execute=True):
                             subprocess.Popen([python_path, filename])
             except Exception as e:
                 console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
-                return False
+                return True  # 返回True因为文件已经保存
             
-            console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
             return True
         else:
-            console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
             return True
 
     except Exception as e:
@@ -957,46 +945,50 @@ def chat_stream(messages, printer, model="deepseek-chat"):
     }
 
 def get_multiline_input():
-    """
-    智能获取用户输入：
-    1) 当输入小于25字时，直接回车即可发送
-    2) 当输入大于等于25字时：
-       - 用户输入任意文本并按回车
-       - 如果下一个输入是空行(立即按回车)，则视为结束
-       - 如果下一个输入不是空行，则视为多行输入，直到出现一次空行(按回车)即结束
-    """
-    console.print(
-        "\n[bold green]用户:[/bold green] ", end=""
-    )
+    """智能获取用户输入"""
+    console.print("\n[bold green]用户:[/bold green] ", end="")
 
-    lines = []
     try:
-        # 第一次输入
-        first_line = input()
-        if not first_line.strip():
-            # 如果刚开始就直接回车，返回空
-            return ""
+        first_line = input().strip()
+    except UnicodeDecodeError:
+        console.print("[red]❌ 输入编码错误，请使用UTF-8编码输入[/red]")
+        return ""
+    except (EOFError, KeyboardInterrupt):
+        console.print("\n[yellow]输入已取消[/yellow]")
+        return ""
 
-        # 将第一行加入
-        lines.append(first_line)
-        
-        # 如果第一行小于25字，直接返回
-        if len(first_line.strip()) < 25:
-            return first_line
+    if not first_line:
+        return ""
 
-        # 尝试读取下一行
+    if len(first_line) < 25:
+        return first_line
+
+    lines = [first_line]
+    console.print("[dim]（输入内容超过25字，进入多行模式。按回车键继续输入，输入空行结束）[/dim]")
+
+    try:
         while True:
-            line = input()
-            # 如果遇到空行，则结束输入
+            console.print(f"[dim]{len(lines) + 1}> [/dim]", end="")
+
+            try:
+                line = input()
+            except UnicodeDecodeError:
+                console.print("[red]❌ 输入编码错误，继续输入或输入空行结束[/red]")
+                continue
+            except KeyboardInterrupt:
+                console.print("\n[yellow]已取消当前行输入，按回车结束整体输入，或继续输入新行[/yellow]")
+                continue
+
             if not line.strip():
                 break
+
             lines.append(line)
-    except EOFError:
-        # 用户可能触发了 Ctrl+Z / Ctrl+D
-        pass
-    except KeyboardInterrupt:
-        # 处理 Ctrl+C
-        return ""
+
+            if len(lines) > 50:
+                console.print("[yellow]⚠️ 输入行数较多，记得输入空行结束[/yellow]")
+
+    except (EOFError, KeyboardInterrupt):
+        console.print("\n[yellow]多行输入已终止，返回已输入内容[/yellow]")
 
     return "\n".join(lines)
 
@@ -1270,6 +1262,29 @@ from datetime import datetime
                     list_and_run_code()
                     continue
 
+                # 处理run命令
+                if user_input.strip().lower() == "run":
+                    if last_generated_code:
+                        # 提取并安装依赖
+                        required_libs = extract_imports(last_generated_code)
+                        if required_libs:
+                            console.print("\n[yellow]正在检查依赖...[/yellow]")
+                            if not install_dependencies(required_libs):
+                                console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                                continue
+                        save_and_execute_code((last_generated_code, last_suggested_filename), True)
+                    else:
+                        console.print("\n[yellow]⚠️ 没有找到可以执行的代码，请先生成代码再使用run命令[/yellow]")
+                    continue
+                
+                # 处理s命令（保存最后生成的代码）
+                if user_input.strip().lower() == "s":
+                    if last_generated_code:
+                        save_and_execute_code((last_generated_code, last_suggested_filename), False)
+                    else:
+                        console.print("\n[yellow]⚠️ 没有找到可以保存的代码，请先生成代码再使用s命令[/yellow]")
+                    continue
+                
                 # 处理模型切换 - 只在DeepSeek模式下有效
                 if current_client_type == DEEPSEEK_CLIENT:
                     if user_input == "r":
@@ -1286,6 +1301,7 @@ from datetime import datetime
                 # 移除 -n 标志，以免影响模型理解
                 cleaned_input = user_input.replace("-n", "").strip()
                 
+                # 如果不是特殊命令，则传递给AI处理
                 messages.append({"role": "user", "content": cleaned_input})
                 
                 # 流式对话时使用当前选择的模型
@@ -1293,15 +1309,16 @@ from datetime import datetime
                 printer.reset()  # 确保在对话结束后重置状态
                 messages.append({"role": "assistant", "content": response["content"]})
                 
-                # 自动代码处理
-                if any(kw in cleaned_input for kw in ["写", "代码", "生成"]):
-                    code_result = extract_code_from_response(response["content"])
-                    if code_result and code_result[0]:
-                        code_content, suggested_filename = code_result
-                        # 保存最后生成的代码
-                        last_generated_code = code_content
-                        last_suggested_filename = suggested_filename
-                        
+                # 检查响应中是否包含代码块
+                code_result = extract_code_from_response(response["content"])
+                if code_result and code_result[0]:
+                    code_content, suggested_filename = code_result
+                    # 保存最后生成的代码
+                    last_generated_code = code_content
+                    last_suggested_filename = suggested_filename
+                    
+                    # 如果包含特定关键词，则自动处理代码
+                    if any(kw in cleaned_input for kw in ["写", "代码", "生成"]):
                         # 提取并安装依赖
                         required_libs = extract_imports(code_content)
                         if required_libs:
@@ -1313,22 +1330,10 @@ from datetime import datetime
                         # 安装依赖成功后再保存和执行代码
                         save_and_execute_code((code_content, suggested_filename), execute_code)
                     else:
-                        console.print("\n[yellow]⚠️ 未找到可执行的代码[/yellow]")
-                    
-                # 处理run命令
-                if user_input == "run":
-                    if last_generated_code:
-                        # 提取并安装依赖
-                        required_libs = extract_imports(last_generated_code)
-                        if required_libs:
-                            console.print("\n[yellow]正在检查依赖...[/yellow]")
-                            if not install_dependencies(required_libs):
-                                console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
-                                continue
-                        save_and_execute_code((last_generated_code, last_suggested_filename), True)
-                    else:
-                        console.print("\n[yellow]⚠️ 没有找到可以执行的代码[/yellow]")
-                    continue
+                        # 如果不包含关键词，提示用户可以使用run或s命令
+                        console.print("\n[blue]💡 检测到代码块，你可以使用:[/blue]")
+                        console.print("[yellow]- 输入 'run' 来保存并执行代码[/yellow]")
+                        console.print("[yellow]- 输入 's' 来仅保存代码[/yellow]")
                 
             except KeyboardInterrupt:
                 console.print("\n[yellow]🛑 操作已中断[/yellow]")
