@@ -267,6 +267,7 @@ def extract_imports(code_content):
         # 添加包名映射
         package_mapping = {
             'docx': 'python-docx',  # 将 docx 映射到 python-docx
+            'dotenv': 'python-dotenv',  # 将 dotenv 映射到 python-dotenv
             # 可以添加其他需要映射的包
         }
         
@@ -574,18 +575,33 @@ def install_dependencies(required_libs):
                         
                         # 使用线程来读取输出，避免阻塞
                         def read_output(pipe, is_error=False):
-                            for line in pipe:
-                                line = line.strip()
-                                if line:
-                                    if "Installing build dependencies" in line:
-                                        console.print("[yellow]正在安装构建依赖，这可能需要几分钟...[/yellow]")
-                                    elif "Building wheels" in line:
-                                        console.print("[yellow]正在构建wheel包，这可能需要几分钟...[/yellow]")
-                                    else:
-                                        console.print(f"[{'red' if is_error else 'dim'}]{line}[/{'red' if is_error else 'dim'}]")
+                            try:
+                                for line in pipe:
+                                    line = line.strip()
+                                    if line:
+                                        # 添加更多关键词的判断
+                                        if any(keyword in line for keyword in [
+                                            "Collecting",
+                                            "Downloading",
+                                            "Installing",
+                                            "Building wheels",
+                                            "Successfully installed",
+                                            "ERROR:",
+                                            "WARNING:",
+                                            "Requirement already satisfied"
+                                        ]):
+                                            console.print(f"[{'red' if is_error else 'yellow'}]{line}[/{'red' if is_error else 'yellow'}]")
+                                            console.print.out.flush()  # 立即刷新输出
+                                        elif "%" in line:  # 显示下载进度
+                                            console.print(f"[blue]{line}[/blue]", end="\r")
+                                            console.print.out.flush()  # 立即刷新输出
+                                        else:
+                                            console.print(f"[{'red' if is_error else 'dim'}]{line}[/{'red' if is_error else 'dim'}]")
+                                            console.print.out.flush()  # 立即刷新输出
+                            except Exception as e:
+                                console.print(f"[red]输出读取错误: {str(e)}[/red]")
 
                         # 创建并启动输出读取线程
-                        from threading import Thread
                         stdout_thread = Thread(target=read_output, args=(process.stdout,))
                         stderr_thread = Thread(target=read_output, args=(process.stderr, True))
                         stdout_thread.daemon = True
@@ -596,9 +612,13 @@ def install_dependencies(required_libs):
                         # 等待进程完成
                         return_code = process.wait()
                         
-                        # 等待输出读取完成
-                        stdout_thread.join()
-                        stderr_thread.join()
+                        # 确保线程完成
+                        stdout_thread.join(timeout=5)  # 设置超时时间
+                        stderr_thread.join(timeout=5)  # 设置超时时间
+                        
+                        # 关闭管道
+                        process.stdout.close()
+                        process.stderr.close()
                         
                         if return_code == 0:
                             console.print(f"[green]✅ {lib_name}[/green]")
@@ -1089,13 +1109,22 @@ def list_and_run_code():
                 with open(selected_file, 'r', encoding='utf-8') as f:
                     code_content = f.read()
                 
-                # 提取并安装依赖
+                # 提取并检查依赖
                 required_libs = extract_imports(code_content)
                 if required_libs:
-                    console.print("\n[yellow]正在检查依赖...[/yellow]")
-                    if not install_dependencies(required_libs):
-                        console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
-                        continue
+                    console.print("\n[yellow]正在检查已安装的依赖...[/yellow]")
+                    # 过滤出未安装的依赖
+                    uninstalled_libs = [lib for lib in required_libs if not is_installed(lib)]
+                    if uninstalled_libs:
+                        console.print("\n[yellow]检测到以下依赖尚未安装：[/yellow]")
+                        for lib in uninstalled_libs:
+                            console.print(f"[blue]- {lib}[/blue]")
+                        console.print("\n[yellow]正在安装缺失的依赖...[/yellow]")
+                        if not install_dependencies(uninstalled_libs):
+                            console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                            continue
+                    else:
+                        console.print("[green]✓ 所有依赖已安装[/green]")
                 
                 # 获取虚拟环境Python解释器
                 python_path = setup_virtual_env()
@@ -1175,7 +1204,7 @@ def main():
             ))
 
         def init_messages():
-            """初始化对话记忆"""
+            """初始化对话记忆，提示词"""
             return [{
                 "role": "system",
                 "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
@@ -1190,6 +1219,7 @@ def main():
 # pip install xxx
 # 是否需要处理中文字符：是
 # 是否需要提前安装除以上的其它依赖：是
+# 是否需要处理文件路径：是，考虑文件路径的引号兼容性问题
 
 import os
 import sys
@@ -1280,13 +1310,22 @@ from datetime import datetime
                 # 处理run命令
                 if user_input.strip().lower() == "run":
                     if last_generated_code:
-                        # 提取并安装依赖
+                        # 检查依赖是否已安装
                         required_libs = extract_imports(last_generated_code)
                         if required_libs:
-                            console.print("\n[yellow]正在检查依赖...[/yellow]")
-                            if not install_dependencies(required_libs):
-                                console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
-                                continue
+                            console.print("\n[yellow]正在检查已安装的依赖...[/yellow]")
+                            # 过滤出未安装的依赖
+                            uninstalled_libs = [lib for lib in required_libs if not is_installed(lib)]
+                            if uninstalled_libs:
+                                console.print("\n[yellow]检测到以下依赖尚未安装：[/yellow]")
+                                for lib in uninstalled_libs:
+                                    console.print(f"[blue]- {lib}[/blue]")
+                                console.print("\n[yellow]正在安装缺失的依赖...[/yellow]")
+                                if not install_dependencies(uninstalled_libs):
+                                    console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                                    continue
+                            else:
+                                console.print("[green]✓ 所有依赖已安装[/green]")
                         save_and_execute_code((last_generated_code, last_suggested_filename), True)
                     else:
                         console.print("\n[yellow]⚠️ 没有找到可以执行的代码，请先生成代码再使用run命令[/yellow]")
@@ -1357,4 +1396,5 @@ from datetime import datetime
         console.print(f"\n[red]⚠️ 异常: {str(e)}[/red]")
 
 if __name__ == "__main__":
+    main()
     main()
