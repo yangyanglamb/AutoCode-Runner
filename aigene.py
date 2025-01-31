@@ -907,7 +907,7 @@ def check_for_updates():
     try:
         # 导入版本检查模块（修正导入路径）
         sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from 版本检查更新 import get_local_version, check_update, download_and_update, ensure_version_file
+        from version_check_update import get_local_version, check_update, download_and_update, ensure_version_file
         
         # 确保版本文件存在
         ensure_version_file()

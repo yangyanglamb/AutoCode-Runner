@@ -84,6 +84,31 @@ if errorlevel 1 (
     cls
 )
 
+:: 检查.env文件
+if not exist ".env" (
+    if exist ".env.example" (
+        echo [错误] 未找到.env文件
+        echo [提示] 请复制.env.example为.env并设置正确的API密钥
+        pause
+        exit /b 1
+    ) else (
+        echo [错误] 未找到.env和.env.example文件
+        echo [提示] 请确保.env文件存在并包含正确的API密钥
+        pause
+        exit /b 1
+    )
+)
+
+:: 检查.env文件内容
+findstr "DEEPSEEK_API_KEY" ".env" >nul
+if errorlevel 1 (
+    echo [错误] .env文件中未找到DEEPSEEK_API_KEY配置
+    echo [提示] 请在.env文件中添加正确的API密钥
+    echo [示例] DEEPSEEK_API_KEY=your_api_key_here
+    pause
+    exit /b 1
+)
+
 :: 清屏并运行主程序
 cls
 timeout /t 1 >nul

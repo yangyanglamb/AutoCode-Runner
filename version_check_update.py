@@ -1,4 +1,4 @@
-'''版本检查更新'''
+'''version_check_update'''
 # 依赖包：requests
 # pip install requests
 
