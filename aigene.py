@@ -107,7 +107,22 @@ STANDARD_LIBS = {
     'itertools', 'pathlib', 'pickle', 'queue', 'shutil', 'statistics',
     'tempfile', 'typing', 'uuid', 'warnings', 'weakref', 'zipfile',
     'platform', 'string', 'struct', 'textwrap', 'tkinter', 'venv',
-    'wave', 'webbrowser', 'xml.etree.ElementTree', 'zlib', 'ctypes'
+    'wave', 'webbrowser', 'xml.etree.ElementTree', 'zlib', 'ctypes',
+    'glob', 'array', 'ast', 'asyncio', 'base64', 'bisect', 'builtins',
+    'bz2', 'cgi', 'chunk', 'cmd', 'code', 'codecs', 'codeop', 'colorsys',
+    'contextlib', 'dataclasses', 'decimal', 'difflib', 'dis', 'filecmp',
+    'fileinput', 'fnmatch', 'fractions', 'ftplib', 'getopt', 'getpass',
+    'gettext', 'gzip', 'heapq', 'hmac', 'imaplib', 'imghdr', 'inspect',
+    'io', 'ipaddress', 'keyword', 'linecache', 'locale', 'lzma', 'mailbox',
+    'mimetypes', 'modulefinder', 'msilib', 'msvcrt', 'netrc', 'nis', 'nntplib',
+    'numbers', 'operator', 'optparse', 'os.path', 'pdb', 'pipes', 'poplib',
+    'posixpath', 'pprint', 'profile', 'pty', 'pwd', 'py_compile', 'pyclbr',
+    'pydoc', 'quopri', 'runpy', 'sched', 'secrets', 'selectors', 'shelve',
+    'signal', 'smtpd', 'smtplib', 'sndhdr', 'spwd', 'ssl', 'sunau', 'symbol',
+    'symtable', 'sysconfig', 'tabnanny', 'tarfile', 'telnetlib', 'test',
+    'timeit', 'token', 'tokenize', 'trace', 'traceback', 'tracemalloc', 'tty',
+    'turtle', 'uu', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml.dom',
+    'xml.parsers', 'xml.sax', 'xmlrpc'
 }
 
 class ProgressManager:
