@@ -31,26 +31,35 @@ VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version
 BASE_URL = "http://43.242.201.140:5000"
 
 def get_local_version():
-    """获取本地版本号"""
+    """获取本地版本号（hash）"""
     try:
         if os.path.exists(VERSION_FILE):
             with open(VERSION_FILE, "r", encoding="utf-8") as f:
                 return f.read().strip()
-        return "0.0.0"  # 如果文件不存在，返回初始版本
+        return "0" * 40  # 如果文件不存在，返回一个初始hash（40个0）
     except Exception as e:
         print(f"❌ 读取本地版本失败: {e}")
-        return "0.0.0"
+        return "0" * 40
 
 def check_update():
     """检查更新"""
     try:
         response = requests.get(f"{BASE_URL}/check_update")
         if response.status_code == 200:
-            return response.json()
+            update_info = response.json()
+            # 确保返回的数据包含所需的字段
+            if all(key in update_info for key in ['current_version', 'last_version', 'has_update', 'error']):
+                return update_info
+            else:
+                print("❌ 服务器返回的数据格式不正确")
+                return None
         elif response.status_code == 404:
             print("❌ 远程仓库不存在")
         else:
             print(f"❌ 检查更新失败: HTTP {response.status_code}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"❌ 检查更新时发生网络错误: {e}")
         return None
     except Exception as e:
         print(f"❌ 检查更新时发生错误: {e}")
@@ -188,32 +197,32 @@ def main():
         
         # 获取本地版本
         local_version = get_local_version()
-
-        update_info = check_update()
         
+        update_info = check_update()
         if update_info is None:
             return
-        
-        if not update_info["has_update"]:
-            return
             
-        print(f"发现新版本: {update_info['current_version']}")
-        
-        # 询问用户是否更新
-        while True:
-            choice = input("是否更新到最新版本？(y/n): ").lower().strip()
-            if choice in ['y', 'yes']:
-                if download_and_update():
-                    # 更新成功后，更新版本号
-                    with open(VERSION_FILE, "w", encoding="utf-8") as f:
-                        f.write(update_info['current_version'])
-                    print("🎉 程序已更新完成，请重启程序！")
-                break
-            elif choice in ['n', 'no']:
-                print("已取消更新")
-                break
-            else:
-                print("无效的输入，请输入 y 或 n")
+        # 检查是否需要更新
+        if update_info["last_version"] != local_version:
+            print(f"发现新版本")
+            print(f"当前版本: {local_version}")
+            print(f"最新版本: {update_info['current_version']}")
+            
+            # 询问用户是否更新
+            while True:
+                choice = input("是否更新到最新版本？(y/n): ").lower().strip()
+                if choice in ['y', 'yes']:
+                    if download_and_update():
+                        # 更新成功后，更新版本号
+                        with open(VERSION_FILE, "w", encoding="utf-8") as f:
+                            f.write(update_info['current_version'])
+                        print("🎉 程序已更新完成，请重启程序！")
+                    break
+                elif choice in ['n', 'no']:
+                    print("已取消更新")
+                    break
+                else:
+                    print("无效的输入，请输入 y 或 n")
 
     except Exception as e:
         print(f"❌ 程序运行出错: {e}")
