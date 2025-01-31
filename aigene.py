@@ -930,6 +930,10 @@ def check_for_updates():
                 choice = input().lower().strip()
                 if choice in ['y', 'yes']:
                     if download_and_update():
+                        # 更新成功后，更新版本号
+                        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
+                        with open(version_file, "w", encoding="utf-8") as f:
+                            f.write(update_info['current_version'])
                         # 更新成功后退出程序
                         console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
                         console.print("[yellow]10秒后自动退出...[/yellow]")
