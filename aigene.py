@@ -310,15 +310,58 @@ def is_installed(lib_name):
         
         # 获取虚拟环境Python解释器路径
         python_path = setup_virtual_env()
-        # 使用虚拟环境的Python检查包是否已安装
+        
+        # 使用pip show检查包是否已安装
         result = subprocess.run(
-            [python_path, "-c", f"import {package_name}"],
+            [python_path, "-m", "pip", "show", package_name],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
-        return result.returncode == 0
-    except Exception:
+        
+        # 如果返回码为0，说明包已安装
+        if result.returncode == 0:
+            # 检查特殊包的依赖是否也已安装
+            special_packages = {
+                'manim': [
+                    'numpy', 'pillow', 'scipy', 'matplotlib', 'tqdm', 'colour', 'pycairo',
+                    'cloup', 'click', 'moderngl', 'moderngl_window', 'mapbox-earcut',
+                    'networkx', 'decorator'
+                ],
+                'torch': ['numpy', 'typing-extensions', 'filelock', 'sympy', 'networkx', 'jinja2'],
+                'tensorflow': [
+                    'numpy', 'six', 'wheel', 'packaging', 'protobuf', 'keras',
+                    'h5py', 'wrapt', 'opt-einsum', 'astunparse', 'gast'
+                ],
+                'opencv-python': ['numpy', 'pillow'],
+                'pygame': ['numpy'],
+                'kivy': ['docutils', 'pygments', 'kivy_deps.sdl2', 'kivy_deps.glew']
+            }
+            
+            # 如果是特殊包，检查其依赖
+            if package_name in special_packages:
+                missing_deps = []
+                for dep in special_packages[package_name]:
+                    dep_result = subprocess.run(
+                        [python_path, "-m", "pip", "show", dep],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    if dep_result.returncode != 0:
+                        console.print(f"[yellow]依赖包 {dep} 未安装[/yellow]")
+                        missing_deps.append(dep)
+                
+                if missing_deps:
+                    return False
+            
+            console.print(f"[green]✓ {package_name} 已安装[/green]")
+            return True
+            
+        return False
+        
+    except Exception as e:
+        console.print(f"[yellow]检查 {lib_name} 安装状态时出错: {str(e)}[/yellow]")
         return False
 
 def check_python_version():
@@ -506,27 +549,83 @@ def install_dependencies(required_libs):
             installed = False
             lib_name = lib.split('==')[0] if '==' in lib else lib
             
-            # 对manim进行特殊处理
-            if lib_name == 'manim':
+            # 对特殊包进行处理
+            special_packages = {
+                'manim': {
+                    'deps': [
+                        'numpy', 'pillow', 'scipy', 'matplotlib', 'tqdm', 'colour', 'pycairo',
+                        'cloup', 'click', 'moderngl', 'moderngl_window', 'mapbox-earcut',
+                        'networkx', 'decorator'
+                    ],
+                    'message': """[yellow]提示：manim安装失败可能是因为：[/yellow]
+1. 系统PATH中未正确添加MiKTeX和FFmpeg
+2. 需要重启终端以使环境变量生效
+3. 可以尝试手动执行: pip install manim"""
+                },
+                'torch': {
+                    'deps': ['numpy', 'typing-extensions', 'filelock', 'sympy', 'networkx', 'jinja2'],
+                    'message': """[yellow]提示：torch安装失败可能是因为：[/yellow]
+1. 网络连接不稳定，建议使用国内镜像
+2. 如果需要GPU支持，请先安装CUDA
+3. 可以访问 https://pytorch.org/ 选择合适的版本"""
+                },
+                'tensorflow': {
+                    'deps': [
+                        'numpy', 'six', 'wheel', 'packaging', 'protobuf', 'keras',
+                        'h5py', 'wrapt', 'opt-einsum', 'astunparse', 'gast'
+                    ],
+                    'message': """[yellow]提示：tensorflow安装失败可能是因为：[/yellow]
+1. 需要先安装Microsoft Visual C++ Redistributable
+2. 如果需要GPU支持，请先安装CUDA和cuDNN
+3. 可以尝试安装CPU版本：pip install tensorflow-cpu"""
+                },
+                'opencv-python': {
+                    'deps': ['numpy', 'pillow'],
+                    'message': """[yellow]提示：opencv-python安装失败可能是因为：[/yellow]
+1. 需要安装Microsoft Visual C++ Redistributable
+2. 可以尝试安装headless版本：pip install opencv-python-headless"""
+                },
+                'pygame': {
+                    'deps': ['numpy'],
+                    'message': """[yellow]提示：pygame安装失败可能是因为：[/yellow]
+1. 需要安装SDL库
+2. 需要安装Microsoft Visual C++ Redistributable
+3. 可以尝试：pip install pygame --pre"""
+                },
+                'kivy': {
+                    'deps': ['docutils', 'pygments', 'kivy_deps.sdl2', 'kivy_deps.glew'],
+                    'message': """[yellow]提示：kivy安装失败可能是因为：[/yellow]
+1. 需要安装Microsoft Visual C++ Build Tools
+2. 需要先安装kivy的依赖：pip install kivy_deps.sdl2 kivy_deps.glew
+3. 建议使用官方预编译wheel：pip install kivy[base] kivy_examples"""
+                }
+            }
+            
+            if lib_name in special_packages:
                 try:
-                    # 先尝试安装依赖包
-                    pre_deps = ['numpy', 'pillow', 'scipy', 'matplotlib', 'tqdm', 'colour', 'pycairo']
-                    for dep in pre_deps:
-                        subprocess.run(
-                            [python_path, "-m", "pip", "install", dep, "-i", mirrors[0]],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            timeout=300
-                        )
+                    package_info = special_packages[lib_name]
+                    # 先尝试安装必要的依赖包
+                    console.print(f"[yellow]正在安装{lib_name}的前置依赖...[/yellow]")
+                    for dep in package_info['deps']:
+                        try:
+                            subprocess.run(
+                                [python_path, "-m", "pip", "install", dep, "-i", mirrors[0]],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                timeout=300
+                            )
+                            console.print(f"[green]✓ {dep}[/green]")
+                        except Exception as e:
+                            console.print(f"[red]安装 {dep} 时出错: {str(e)}[/red]")
                     
-                    # 然后尝试安装manim
+                    # 然后尝试安装主程序
+                    console.print(f"[yellow]正在安装{lib_name}主程序...[/yellow]")
                     for mirror in mirrors:
                         try:
-                            cmd = [python_path, "-m", "pip", "install", "--no-deps", lib]
+                            cmd = [python_path, "-m", "pip", "install", lib]
                             if mirror:
                                 cmd.extend(["-i", mirror])
-                            console.print(f"[yellow]正在安装 {lib_name}...[/yellow]")
                             
                             result = subprocess.run(
                                 cmd,
@@ -548,7 +647,10 @@ def install_dependencies(required_libs):
                 # 其他包使用常规安装方式
                 for mirror in mirrors:
                     try:
-                        # 添加 --prefer-binary 参数优先使用预编译包
+                        # 添加超时控制
+                        timeout = 300  # 5分钟超时
+                        start_time = time.time()
+                        
                         cmd = [
                             python_path, 
                             "-m", 
@@ -556,8 +658,7 @@ def install_dependencies(required_libs):
                             "install", 
                             lib, 
                             "--prefer-binary",  # 优先使用预编译的wheel包
-                            "--no-build-isolation",  # 加快构建速度
-                            "--verbose"
+                            "--disable-pip-version-check"  # 禁用版本检查以加快速度
                         ]
                         if mirror:
                             cmd.extend(["-i", mirror])
@@ -577,30 +678,26 @@ def install_dependencies(required_libs):
                         def read_output(pipe, is_error=False):
                             try:
                                 for line in pipe:
+                                    # 检查是否超时
+                                    if time.time() - start_time > timeout:
+                                        process.terminate()
+                                        console.print(f"[red]安装超时，已终止[/red]")
+                                        return
+                                        
                                     line = line.strip()
                                     if line:
-                                        # 添加更多关键词的判断
+                                        # 只显示重要信息
                                         if any(keyword in line for keyword in [
-                                            "Collecting",
-                                            "Downloading",
-                                            "Installing",
-                                            "Building wheels",
                                             "Successfully installed",
                                             "ERROR:",
                                             "WARNING:",
                                             "Requirement already satisfied"
                                         ]):
                                             console.print(f"[{'red' if is_error else 'yellow'}]{line}[/{'red' if is_error else 'yellow'}]")
-                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
-                                        elif "%" in line:  # 显示下载进度
+                                        elif "%" in line and "Downloading" in line:  # 只显示下载进度
                                             console.print(f"[blue]{line}[/blue]", end="\r")
-                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
-                                        else:
-                                            console.print(f"[{'red' if is_error else 'dim'}]{line}[/{'red' if is_error else 'dim'}]")
-                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
                             except Exception as e:
                                 console.print(f"[red]输出读取错误: {str(e)}[/red]")
-                                sys.stdout.flush()  # 确保错误信息也被刷新
 
                         # 创建并启动输出读取线程
                         stdout_thread = Thread(target=read_output, args=(process.stdout,))
@@ -610,37 +707,36 @@ def install_dependencies(required_libs):
                         stdout_thread.start()
                         stderr_thread.start()
                         
-                        # 等待进程完成
-                        return_code = process.wait()
-                        
-                        # 确保线程完成
-                        stdout_thread.join(timeout=5)  # 设置超时时间
-                        stderr_thread.join(timeout=5)  # 设置超时时间
-                        
-                        # 关闭管道
-                        process.stdout.close()
-                        process.stderr.close()
-                        
-                        if return_code == 0:
-                            console.print(f"[green]✅ {lib_name}[/green]")
-                            installed = True
-                            break
+                        try:
+                            # 等待进程完成，添加超时
+                            return_code = process.wait(timeout=timeout)
                             
-                    except subprocess.TimeoutExpired:
-                        continue
+                            # 确保线程完成
+                            stdout_thread.join(timeout=1)  # 缩短线程等待时间
+                            stderr_thread.join(timeout=1)
+                            
+                            # 关闭管道
+                            process.stdout.close()
+                            process.stderr.close()
+                            
+                            if return_code == 0:
+                                console.print(f"[green]✅ {lib_name}[/green]")
+                                installed = True
+                                break
+                        except subprocess.TimeoutExpired:
+                            process.terminate()
+                            console.print(f"[red]安装超时，已终止[/red]")
+                            continue
                     except Exception as e:
                         console.print(f"[red]安装过程出错: {str(e)}[/red]")
                         continue
-            
-            if not installed:
-                failed_libs.append(lib)
-                if lib_name == 'manim':
-                    console.print("[yellow]提示：manim安装失败可能是因为：[/yellow]")
-                    console.print("1. 系统PATH中未正确添加MiKTeX和FFmpeg")
-                    console.print("2. 需要重启终端以使环境变量生效")
-                    console.print("3. 可以尝试手动执行: pip install manim")
-            
-            progress.update(install_task, advance=1)
+                        
+                if not installed:
+                    failed_libs.append(lib)
+                    if lib_name in special_packages:
+                        console.print(special_packages[lib_name]['message'])
+                
+                progress.update(install_task, advance=1)
     
     if failed_libs:
         console.print(f"\n[red]以下依赖安装失败: {', '.join(failed_libs)},若开启了VPN，请关闭VPN后重试[/red]")
@@ -1077,7 +1173,7 @@ def clear_terminal():
     else:
         os.system("clear")
 
-def list_and_run_code():
+def ls_and_run_code():
     """列出代码工具库中的文件并允许选择运行"""
     code_dir = "代码工具库"
     if not os.path.exists(code_dir):
@@ -1200,7 +1296,7 @@ def main():
         def show_menu():
             """显示程序菜单"""
             console.print(Panel.fit(
-                "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | cl 清除记忆 | list 列出并运行代码 | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
+                "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | cl 清除记忆 | ls 列出并运行代码 | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
                 border_style="blue"
             ))
 
@@ -1304,8 +1400,8 @@ from datetime import datetime
                     continue
                 
                 # 处理list命令
-                if user_input == "list":
-                    list_and_run_code()
+                if user_input == "ls":
+                    ls_and_run_code()
                     continue
 
                 # 处理run命令
