@@ -190,3 +190,56 @@ python常见应用场景：
    - **语音助手**：使用 `speech_recognition` 和 `pyttsx3` 创建简单的语音助手。
    - **任务管理**：开发个人任务管理工具，提高工作效率。
 
+# DeepSeek智能代码助手
+
+## 系统要求
+- Python 3.9
+- 网络连接（用于安装依赖和API调用）
+- DeepSeek API密钥
+
+## 启动说明
+
+### Windows用户
+直接双击运行 `双击点我启动.bat`
+
+### Mac/Linux用户
+1. 首先给启动脚本添加执行权限：
+   ```bash
+   chmod +x 启动程序-Mac和Linux.sh
+   ```
+2. 然后运行启动脚本：
+   ```bash
+   ./启动程序-Mac和Linux.sh
+   ```
+
+## 首次运行说明
+1. 确保已安装Python 3.9
+   - Windows: 从[Python官网](https://www.python.org/downloads/release/python-3913/)下载安装
+   - Mac: 使用Homebrew安装 `brew install python@3.9`
+   - Linux: 使用对应发行版的包管理器安装
+
+2. 配置API密钥
+   - 复制`.env.example`文件并重命名为`.env`
+   - 在`.env`文件中设置你的DeepSeek API密钥：
+     ```
+     DEEPSEEK_API_KEY=your_api_key_here
+     ```
+
+3. 首次运行时，程序会自动：
+   - 创建Python虚拟环境
+   - 安装所需依赖
+   - 配置pip镜像源（使用阿里云镜像加速）
+
+## 常见问题
+1. 如果遇到网络问题：
+   - 检查网络连接
+   - 关闭代理/VPN后重试
+   
+2. 如果遇到权限问题：
+   - Windows: 以管理员身份运行
+   - Mac/Linux: 确保已给予脚本执行权限
+
+3. 如果遇到Python相关问题：
+   - 确保安装了正确版本的Python 3.9
+   - Windows用户确保安装时勾选了"Add Python 3.9 to PATH"选项
+

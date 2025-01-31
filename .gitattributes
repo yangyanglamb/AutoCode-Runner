@@ -1,0 +1,15 @@
+# 设置默认行为
+* text=auto
+
+# Windows批处理文件使用CRLF
+*.bat text eol=crlf
+
+# Shell脚本使用LF
+*.sh text eol=lf
+
+# Python文件使用LF
+*.py text eol=lf
+
+# 文本文件使用LF
+*.txt text eol=lf
+*.md text eol=lf 
