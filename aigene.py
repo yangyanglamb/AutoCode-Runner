@@ -608,14 +608,43 @@ def install_dependencies(required_libs):
                     console.print(f"[yellow]正在安装{lib_name}的前置依赖...[/yellow]")
                     for dep in package_info['deps']:
                         try:
-                            subprocess.run(
+                            # 使用Popen实现实时输出
+                            process = subprocess.Popen(
                                 [python_path, "-m", "pip", "install", dep, "-i", mirrors[0]],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 text=True,
-                                timeout=300
+                                bufsize=1,
+                                universal_newlines=True
                             )
-                            console.print(f"[green]✓ {dep}[/green]")
+                            
+                            # 读取输出
+                            while True:
+                                line = process.stdout.readline()
+                                if not line and process.poll() is not None:
+                                    break
+                                if line:
+                                    line = line.strip()
+                                    if any(keyword in line for keyword in [
+                                        "Successfully installed",
+                                        "Requirement already satisfied",
+                                        "ERROR:",
+                                        "WARNING:"
+                                    ]):
+                                        console.print(f"[yellow]{line}[/yellow]")
+                                    elif "%" in line and "Downloading" in line:
+                                        console.print(f"[blue]{line}[/blue]", end="\r")
+                            
+                            # 检查错误输出
+                            error_output = process.stderr.read()
+                            if error_output:
+                                console.print(f"[red]{error_output.strip()}[/red]")
+                            
+                            if process.returncode == 0:
+                                console.print(f"[green]✓ {dep}[/green]")
+                            else:
+                                console.print(f"[red]安装 {dep} 失败[/red]")
+                                
                         except Exception as e:
                             console.print(f"[red]安装 {dep} 时出错: {str(e)}[/red]")
                     
@@ -623,22 +652,47 @@ def install_dependencies(required_libs):
                     console.print(f"[yellow]正在安装{lib_name}主程序...[/yellow]")
                     for mirror in mirrors:
                         try:
+                            # 使用Popen实现实时输出
                             cmd = [python_path, "-m", "pip", "install", lib]
                             if mirror:
                                 cmd.extend(["-i", mirror])
                             
-                            result = subprocess.run(
+                            process = subprocess.Popen(
                                 cmd,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 text=True,
-                                timeout=300
+                                bufsize=1,
+                                universal_newlines=True
                             )
                             
-                            if result.returncode == 0:
+                            # 读取输出
+                            while True:
+                                line = process.stdout.readline()
+                                if not line and process.poll() is not None:
+                                    break
+                                if line:
+                                    line = line.strip()
+                                    if any(keyword in line for keyword in [
+                                        "Successfully installed",
+                                        "Requirement already satisfied",
+                                        "ERROR:",
+                                        "WARNING:"
+                                    ]):
+                                        console.print(f"[yellow]{line}[/yellow]")
+                                    elif "%" in line and "Downloading" in line:
+                                        console.print(f"[blue]{line}[/blue]", end="\r")
+                            
+                            # 检查错误输出
+                            error_output = process.stderr.read()
+                            if error_output:
+                                console.print(f"[red]{error_output.strip()}[/red]")
+                            
+                            if process.returncode == 0:
                                 console.print(f"[green]✅ {lib_name}[/green]")
                                 installed = True
                                 break
+                            
                         except Exception:
                             continue
                 except Exception as e:
