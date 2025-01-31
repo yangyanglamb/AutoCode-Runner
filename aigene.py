@@ -929,10 +929,10 @@ def check_for_updates():
         
         ensure_version_file()
         
-        # 检查更新
-        update_info = check_update()
+        # 检查更新，不显示详细信息
+        update_info = check_update(show_detail=False)
         if update_info and update_info.get('has_update'):
-            latest_version = update_info.get('current_version', '')
+            latest_version = update_info.get('last_version', '')  # 使用 last_version
             
             # 询问是否更新
             while True:
@@ -940,6 +940,9 @@ def check_for_updates():
                 if choice in ['y', 'yes']:
                     console.print("[green]开始更新...[/green]")
                     if download_and_update():
+                        # 更新成功后，更新版本号为最新版本号
+                        with open(os.path.join(current_dir, "version.txt"), "w", encoding="utf-8") as f:
+                            f.write(latest_version)  # 使用 last_version
                         console.print("[green]✓ 更新完成！请重启程序以应用更新。[/green]")
                     else:
                         console.print("[red]× 更新失败！[/red]")

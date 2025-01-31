@@ -48,33 +48,52 @@ def get_local_version():
         print(f"❌ 读取本地版本失败: {e}")
         return "0" * 40
 
-def check_update():
+def check_update(show_detail=False):
     """检查更新"""
     try:
         # 获取本地版本
         local_version = get_local_version()
+        if show_detail:
+            print(f"本地版本: {local_version}")
+            print(f"正在连接服务器 {BASE_URL}/check_update ...")
         
-        response = requests.get(f"{BASE_URL}/check_update", timeout=10)  # 添加超时设置
+        response = requests.get(f"{BASE_URL}/check_update", timeout=10)
+        if show_detail:
+            print(f"服务器响应状态码: {response.status_code}")
         
         if response.status_code == 200:
             update_info = response.json()
+            if show_detail:
+                print(f"服务器返回数据: {update_info}")
+                
             # 确保返回的数据包含所需的字段
             if all(key in update_info for key in ['current_version', 'last_version', 'has_update', 'error']):
                 # 添加本地版本比较逻辑
-                server_version = update_info['current_version']
-                if local_version != server_version:
+                latest_version = update_info['last_version']  # 使用 last_version
+                if local_version != latest_version:  # 比较本地版本和最新版本
                     update_info['has_update'] = True
-                    print(f"\n[发现新版本]")
-                    print(f"当前版本: {local_version}")
-                    print(f"最新版本: {server_version}")
+                    if show_detail:
+                        print("\n详细版本信息:")
+                        print(f"本地版本: {local_version}")
+                        print(f"当前版本: {update_info['current_version']}")
+                        print(f"最新版本: {latest_version}")
+                    else:
+                        print(f"\n[发现新版本]")
+                        print(f"当前版本: {local_version}")
+                        print(f"最新版本: {latest_version}")
                 return update_info
             else:
                 print("❌ 服务器返回的数据格式不正确")
+                if show_detail:
+                    print(f"期望字段: current_version, last_version, has_update, error")
+                    print(f"实际数据: {update_info}")
                 return None
         elif response.status_code == 404:
             print("❌ 远程仓库不存在")
         else:
             print(f"❌ 检查更新失败: HTTP {response.status_code}")
+            if show_detail:
+                print(f"响应内容: {response.text}")
         return None
     except requests.exceptions.Timeout:
         print("❌ 连接服务器超时，请检查网络连接")
@@ -84,6 +103,10 @@ def check_update():
         return None
     except Exception as e:
         print(f"❌ 检查更新时发生错误: {e}")
+        if show_detail:
+            print("错误详细信息:")
+            import traceback
+            traceback.print_exc()
         return None
 
 def download_and_update():
@@ -230,7 +253,7 @@ def main():
         print(f"当前本地版本: {local_version}")
         
         print("连接服务器检查更新...")
-        update_info = check_update()
+        update_info = check_update(show_detail=True)  # 在这里启用详细输出
         if update_info is None:
             print("无法获取更新信息，程序将退出")
             input("按回车键退出...") 
