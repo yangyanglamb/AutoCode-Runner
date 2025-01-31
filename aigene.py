@@ -956,6 +956,13 @@ def check_for_updates():
     except Exception as e:
         console.print(f"\n[red]更新检查失败: {str(e)}[/red]")
 
+def clear_terminal():
+    """清除终端内容"""
+    if sys.platform == "win32":
+        os.system("cls")
+    else:
+        os.system("clear")
+
 def main():
     try:
         global current_client_type, client
@@ -979,10 +986,19 @@ def main():
         
         printer = StreamPrinter()
         current_model = "deepseek-chat" if current_client_type == DEEPSEEK_CLIENT else "qwen-max-2025-01-25"  # 默认模型
-        #提示词
-        messages = [{
-            "role": "system",
-            "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
+        
+        def show_menu():
+            """显示程序菜单"""
+            console.print(Panel.fit(
+                "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | cl 清除记忆 | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
+                border_style="blue"
+            ))
+
+        def init_messages():
+            """初始化对话记忆"""
+            return [{
+                "role": "system",
+                "content": """你是一个Python专家。在生成代码时，请遵循以下规则：
 
 ## 基础结构
 1. 代码块格式（必须严格遵守）
@@ -1054,14 +1070,11 @@ from datetime import datetime
 3. 重新运行本程序
 这样才能确保系统级依赖生效
 """
-        }]
+            }]
+
+        messages = init_messages()
+        show_menu()
     
-        # 修改面板显示内容，移除客户端切换选项
-        console.print(Panel.fit(
-            "[bold yellow]AI 智能代码执行助手[/bold yellow]\n[dim]r 切换到 reasoner(深度思考) | c 切换到 chat(一般模式) | -n 仅保存不执行下次代码 | s 保存上次代码 |\nrun 保存并执行上次代码 | 触发词: 写, 代码, 生成 | 多于25字时，按两次回车发送[/dim]",
-            border_style="blue"
-        ))
-        
         while True:
             try:
                 user_input = get_multiline_input().strip()
@@ -1069,7 +1082,15 @@ from datetime import datetime
                 # 忽略空输入
                 if not user_input:
                     continue
-                    
+                
+                # 处理清除记忆命令
+                if user_input == "cl":
+                    messages = init_messages()  # 重新初始化消息列表
+                    clear_terminal()  # 清除终端
+                    show_menu()  # 重新显示菜单
+                    console.print("[green]✓ 记忆已清除[/green]")
+                    continue
+
                 # 处理模型切换 - 只在DeepSeek模式下有效
                 if current_client_type == DEEPSEEK_CLIENT:
                     if user_input == "r":
