@@ -104,14 +104,12 @@ def check_update(show_detail=False):
 
 def download_and_update():
     """下载并更新程序"""
+    temp_dir = None
     try:
-        # 获取当前文件所在目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # 创建临时目录时使用 Path 对象以提高跨平台兼容性
         temp_dir = Path(current_dir) / "temp_update"
         temp_dir.mkdir(parents=True, exist_ok=True)
-            
+        
         update_zip = temp_dir / "update.zip"
         
         # 下载更新包
@@ -148,7 +146,7 @@ def download_and_update():
                 dst_path = os.path.join(dst_dir, item)
                 
                 if os.path.isfile(src_path):
-                    # 跳过当前正在运行的文件
+                    # 跳过正在运行的文件
                     if os.path.abspath(dst_path) in [current_file, aigene_file]:
                         print(f"跳过更新正在运行的文件: {item}")
                         continue
@@ -190,6 +188,15 @@ def download_and_update():
     except Exception as e:
         print(f"❌ 更新过程中发生错误: {e}")
         return False
+        
+    finally:
+        # 在函数结束时清理临时目录
+        if temp_dir and temp_dir.exists():
+            try:
+                shutil.rmtree(str(temp_dir))
+                print("已清理临时文件")
+            except Exception as e:
+                print(f"清理临时文件失败: {e}")
 
 def check_pending_updates():
     """检查是否有待更新的文件"""
@@ -250,8 +257,7 @@ def main():
         # 检查是否需要更新
         if update_info["has_update"]:  # 修改判断条件
             print(f"\n[发现新版本]")
-            print(f"当前版本: {update_info['current_version']}")
-            print(f"最新版本: {update_info['last_version']}")
+
             
             # 询问用户是否更新
             while True:
