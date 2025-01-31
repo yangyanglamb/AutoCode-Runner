@@ -13,13 +13,17 @@ from datetime import datetime
 
 # 在导入其他包之前，确保使用正确的Python环境
 def ensure_correct_python():
-    #确保使用正确的Python环境
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    python_path = os.path.join(os.path.dirname(current_dir), "venv3.9", "Scripts", "python.exe")
-    
-    if os.path.exists(python_path) and sys.executable.lower() != python_path.lower():
-        print(f"正在切换到正确的Python环境...")
-        os.execv(python_path, [python_path] + sys.argv)
+    """确保使用正确的Python环境"""
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        python_path = os.path.join(os.path.dirname(current_dir), "venv3.9", "Scripts", "python.exe")
+        
+        if os.path.exists(python_path) and sys.executable.lower() != python_path.lower():
+            print(f"正在切换到正确的Python环境...")
+            os.execv(python_path, [python_path] + sys.argv)
+    except Exception as e:
+        print(f"⚠️ Python环境切换失败: {e}")
+        # 继续执行，不中断程序
 
 # 先执行环境切换
 if __name__ == "__main__":
@@ -80,6 +84,12 @@ def download_and_update():
         # 获取项目根目录
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
+        # 创建临时目录时使用 Path 对象以提高跨平台兼容性
+        temp_dir = Path(root_dir) / "temp_update"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+            
+        update_zip = temp_dir / "update.zip"
+        
         # 下载更新包
         print("正在下载更新...")
         response = requests.get(f"{BASE_URL}/download", stream=True)
@@ -88,11 +98,6 @@ def download_and_update():
             return False
 
         # 保存更新包到临时目录
-        temp_dir = os.path.join(root_dir, "temp_update")
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-            
-        update_zip = os.path.join(temp_dir, "update.zip")
         with open(update_zip, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -100,13 +105,13 @@ def download_and_update():
 
         # 解压更新包
         print("正在解压更新包...")
-        with zipfile.ZipFile(update_zip, 'r') as zip_ref:
+        with zipfile.ZipFile(str(update_zip), 'r') as zip_ref:
             # 解压到临时目录
-            extract_dir = os.path.join(temp_dir, "extracted")
-            if os.path.exists(extract_dir):
-                shutil.rmtree(extract_dir)
-            os.makedirs(extract_dir)
-            zip_ref.extractall(extract_dir)
+            extract_dir = temp_dir / "extracted"
+            if extract_dir.exists():
+                shutil.rmtree(str(extract_dir))
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            zip_ref.extractall(str(extract_dir))
 
         # 复制更新文件
         def copy_files(src_dir, dst_dir):
