@@ -193,13 +193,14 @@ class StreamPrinter:
 def extract_code_from_response(response):
     """代码提取函数（必须定义）"""
     # 提取文件名（如果有）
-    filename_match = re.search(r'『(.+?)』\.py', response)
+    # 修改正则表达式以更准确地匹配中文文件名
+    filename_match = re.search(r'『([\u4e00-\u9fa5a-zA-Z0-9_-]+)』\.py', response)
     suggested_filename = filename_match.group(1) if filename_match else None
     
     # 提取代码块（严格格式要求）
     code_blocks = re.findall(
         r'```(?:python)?\s*\n'  # 开始三引号，可选的python标记
-        r'(?:『[\w\s-]+』\.py\n)?'  # 可选的文件名声明
+        r'(?:『[\u4e00-\u9fa5a-zA-Z0-9_-]+』\.py\n)?'  # 可选的文件名声明
         r'(.*?)'  # 捕获所有代码内容
         r'```',  # 结束三引号
         response,
@@ -215,6 +216,19 @@ def extract_code_from_response(response):
     # 确保提取到依赖声明
     if not any(line.startswith('# 依赖包：') for line in code_content.split('\n')):
         console.print("[yellow]警告：未检测到依赖声明，可能会影响依赖安装[/yellow]")
+    
+    # 如果文件名包含中文，确保系统支持
+    if suggested_filename and any('\u4e00' <= c <= '\u9fa5' for c in suggested_filename):
+        try:
+            # 测试文件名是否可用
+            test_path = os.path.join("代码工具库", f"{suggested_filename}.py")
+            with open(test_path, "w", encoding="utf-8") as f:
+                f.write("")
+            os.remove(test_path)
+        except OSError:
+            # 如果中文文件名出现问题，使用拼音或时间戳
+            console.print("[yellow]警告：中文文件名可能不被支持，将使用时间戳命名[/yellow]")
+            suggested_filename = f"code_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
     return code_content, suggested_filename
 
