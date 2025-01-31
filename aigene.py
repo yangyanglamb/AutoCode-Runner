@@ -610,7 +610,7 @@ def install_dependencies(required_libs):
                         try:
                             # 使用Popen实现实时输出
                             process = subprocess.Popen(
-                                [python_path, "-m", "pip", "install", dep, "-i", mirrors[0]],
+                                [python_path, "-m", "pip", "install", "--no-cache-dir", dep, "-i", mirrors[0]],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 text=True,
@@ -653,7 +653,14 @@ def install_dependencies(required_libs):
                     for mirror in mirrors:
                         try:
                             # 使用Popen实现实时输出
-                            cmd = [python_path, "-m", "pip", "install", lib]
+                            cmd = [
+                                python_path, 
+                                "-m", 
+                                "pip", 
+                                "install", 
+                                "--no-cache-dir",  # 添加no-cache-dir参数
+                                lib
+                            ]
                             if mirror:
                                 cmd.extend(["-i", mirror])
                             
@@ -667,12 +674,15 @@ def install_dependencies(required_libs):
                             )
                             
                             # 读取输出
+                            success = False
                             while True:
                                 line = process.stdout.readline()
                                 if not line and process.poll() is not None:
                                     break
                                 if line:
                                     line = line.strip()
+                                    if "Successfully installed" in line:
+                                        success = True
                                     if any(keyword in line for keyword in [
                                         "Successfully installed",
                                         "Requirement already satisfied",
@@ -688,12 +698,16 @@ def install_dependencies(required_libs):
                             if error_output:
                                 console.print(f"[red]{error_output.strip()}[/red]")
                             
-                            if process.returncode == 0:
+                            if process.returncode == 0 and success:
                                 console.print(f"[green]✅ {lib_name}[/green]")
                                 installed = True
                                 break
+                            elif process.returncode == 0:
+                                # 如果返回码是0但没有成功信息，可能需要重试
+                                continue
                             
-                        except Exception:
+                        except Exception as e:
+                            console.print(f"[red]安装出错: {str(e)}[/red]")
                             continue
                 except Exception as e:
                     console.print(f"[red]安装 {lib_name} 时出错: {str(e)}[/red]")
