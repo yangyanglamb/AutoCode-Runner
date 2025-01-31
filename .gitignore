@@ -7,3 +7,4 @@ venv3.9/
 开发笔记/
 version.txt
 __pycache__/
+github_version_check.py

@@ -54,7 +54,6 @@ def check_update(show_detail=False):
         # 获取本地版本
         local_version = get_local_version()
         if show_detail:
-            print(f"本地版本: {local_version}")
             print(f"正在连接服务器 {BASE_URL}/check_update ...")
         
         response = requests.get(f"{BASE_URL}/check_update", timeout=10)
@@ -73,13 +72,7 @@ def check_update(show_detail=False):
                 if local_version != latest_version:  # 比较本地版本和最新版本
                     update_info['has_update'] = True
                     if show_detail:
-                        print("\n详细版本信息:")
-                        print(f"本地版本: {local_version}")
-                        print(f"当前版本: {update_info['current_version']}")
-                        print(f"最新版本: {latest_version}")
-                    else:
-                        print(f"\n[发现新版本]")
-                        print(f"当前版本: {local_version}")
+                        print(f"\n当前版本: {local_version}")
                         print(f"最新版本: {latest_version}")
                 return update_info
             else:
@@ -247,11 +240,6 @@ def main():
         print("检查版本文件...")
         ensure_version_file()
         
-        # 获取本地版本
-        print("获取本地版本...")
-        local_version = get_local_version()
-        print(f"当前本地版本: {local_version}")
-        
         print("连接服务器检查更新...")
         update_info = check_update(show_detail=True)  # 在这里启用详细输出
         if update_info is None:
@@ -261,18 +249,18 @@ def main():
             
         # 检查是否需要更新
         if update_info["has_update"]:  # 修改判断条件
-            print(f"发现新版本")
-            print(f"当前版本: {local_version}")
-            print(f"最新版本: {update_info['current_version']}")
+            print(f"\n[发现新版本]")
+            print(f"当前版本: {update_info['current_version']}")
+            print(f"最新版本: {update_info['last_version']}")
             
             # 询问用户是否更新
             while True:
                 choice = input("是否更新到最新版本？(y/n): ").lower().strip()
                 if choice in ['y', 'yes']:
                     if download_and_update():
-                        # 更新成功后，更新版本号
+                        # 更新成功后，更新版本号为最新版本号
                         with open(VERSION_FILE, "w", encoding="utf-8") as f:
-                            f.write(update_info['current_version'])
+                            f.write(update_info['last_version'])  # 使用last_version
                         print("🎉 程序已更新完成，请重启程序！")
                     input("按回车键退出...") 
                     break
