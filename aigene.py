@@ -991,7 +991,7 @@ def check_for_updates():
         
         ensure_version_file()
         
-        # 检查更新，不显示详细信息
+        # 检查更新，不显示详细信息.
         update_info = check_update(show_detail=False)
         if update_info and update_info.get('has_update'):
             latest_version = update_info.get('last_version', '')  # 使用 last_version
