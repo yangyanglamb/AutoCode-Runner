@@ -591,15 +591,16 @@ def install_dependencies(required_libs):
                                             "Requirement already satisfied"
                                         ]):
                                             console.print(f"[{'red' if is_error else 'yellow'}]{line}[/{'red' if is_error else 'yellow'}]")
-                                            console.print.out.flush()  # 立即刷新输出
+                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
                                         elif "%" in line:  # 显示下载进度
                                             console.print(f"[blue]{line}[/blue]", end="\r")
-                                            console.print.out.flush()  # 立即刷新输出
+                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
                                         else:
                                             console.print(f"[{'red' if is_error else 'dim'}]{line}[/{'red' if is_error else 'dim'}]")
-                                            console.print.out.flush()  # 立即刷新输出
+                                            sys.stdout.flush()  # 使用sys.stdout.flush()刷新输出
                             except Exception as e:
                                 console.print(f"[red]输出读取错误: {str(e)}[/red]")
+                                sys.stdout.flush()  # 确保错误信息也被刷新
 
                         # 创建并启动输出读取线程
                         stdout_thread = Thread(target=read_output, args=(process.stdout,))
