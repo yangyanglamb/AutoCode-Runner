@@ -51,11 +51,22 @@ def get_local_version():
 def check_update():
     """检查更新"""
     try:
-        response = requests.get(f"{BASE_URL}/check_update")
+        # 获取本地版本
+        local_version = get_local_version()
+        
+        response = requests.get(f"{BASE_URL}/check_update", timeout=10)  # 添加超时设置
+        
         if response.status_code == 200:
             update_info = response.json()
             # 确保返回的数据包含所需的字段
             if all(key in update_info for key in ['current_version', 'last_version', 'has_update', 'error']):
+                # 添加本地版本比较逻辑
+                server_version = update_info['current_version']
+                if local_version != server_version:
+                    update_info['has_update'] = True
+                    print(f"\n[发现新版本]")
+                    print(f"当前版本: {local_version}")
+                    print(f"最新版本: {server_version}")
                 return update_info
             else:
                 print("❌ 服务器返回的数据格式不正确")
@@ -64,6 +75,9 @@ def check_update():
             print("❌ 远程仓库不存在")
         else:
             print(f"❌ 检查更新失败: HTTP {response.status_code}")
+        return None
+    except requests.exceptions.Timeout:
+        print("❌ 连接服务器超时，请检查网络连接")
         return None
     except requests.exceptions.RequestException as e:
         print(f"❌ 检查更新时发生网络错误: {e}")
@@ -135,7 +149,7 @@ def download_and_update():
 
         # 从临时目录复制文件到项目目录
         print("正在更新文件...")
-        copy_files(extract_dir, root_dir)
+        copy_files(str(extract_dir), root_dir)
 
         # 将正在运行的文件标记为待更新
         pending_update_file = os.path.join(root_dir, "pending_update.json")
@@ -144,7 +158,7 @@ def download_and_update():
                 os.path.relpath(__file__, root_dir),
                 "aigene.py"
             ],
-            "source_dir": extract_dir,
+            "source_dir": str(extract_dir),  # 将 Path 对象转换为字符串
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         with open(pending_update_file, "w", encoding="utf-8") as f:
@@ -219,11 +233,11 @@ def main():
         update_info = check_update()
         if update_info is None:
             print("无法获取更新信息，程序将退出")
-            input("按回车键退出...") # 添加暂停，查看错误信息
+            input("按回车键退出...") 
             return
             
         # 检查是否需要更新
-        if update_info["last_version"] != local_version:
+        if update_info["has_update"]:  # 修改判断条件
             print(f"发现新版本")
             print(f"当前版本: {local_version}")
             print(f"最新版本: {update_info['current_version']}")
@@ -237,21 +251,24 @@ def main():
                         with open(VERSION_FILE, "w", encoding="utf-8") as f:
                             f.write(update_info['current_version'])
                         print("🎉 程序已更新完成，请重启程序！")
-                        input("按回车键退出...") # 添加暂停，等待用户确认
+                    input("按回车键退出...") 
                     break
                 elif choice in ['n', 'no']:
                     print("已取消更新")
-                    input("按回车键退出...") # 添加暂停，等待用户确认
+                    input("按回车键退出...") 
                     break
                 else:
                     print("无效的输入，请输入 y 或 n")
+        else:
+            print("✅ 当前已是最新版本")
+            input("按回车键退出...") # 添加结束提示
 
     except Exception as e:
         print(f"❌ 程序运行出错: {e}")
         print("错误详细信息:")
         import traceback
         traceback.print_exc()
-        input("按回车键退出...") # 添加暂停，查看错误信息
+        input("按回车键退出...") 
 
 if __name__ == "__main__":
     try:

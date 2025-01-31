@@ -928,18 +928,27 @@ def check_for_updates():
         sys.path.pop(0)
         
         ensure_version_file()
-        local_version = get_local_version()
         
-        # 打印当前版本信息
-        console.print(f"\n[blue]当前程序版本: v{local_version}[/blue]")
-        
-        # 检查更新 - 不传递参数.
-        update_info = check_update()  # 移除 local_version 参数
+        # 检查更新
+        update_info = check_update()
         if update_info and update_info.get('has_update'):
             latest_version = update_info.get('current_version', '')
-            console.print(f"[green]发现新版本: v{latest_version}[/green]")
-        else:
-            console.print("[green]✓ 当前已是最新版本[/green]")
+            
+            # 询问是否更新
+            while True:
+                choice = input("是否更新到最新版本？(y/n): ").lower().strip()
+                if choice in ['y', 'yes']:
+                    console.print("[green]开始更新...[/green]")
+                    if download_and_update():
+                        console.print("[green]✓ 更新完成！请重启程序以应用更新。[/green]")
+                    else:
+                        console.print("[red]× 更新失败！[/red]")
+                    break
+                elif choice in ['n', 'no']:
+                    console.print("[yellow]已取消更新[/yellow]")
+                    break
+                else:
+                    console.print("无效的输入，请输入 y 或 n")
             
     except Exception as e:
         console.print(f"\n[red]更新检查失败: {str(e)}[/red]")
