@@ -198,26 +198,25 @@ def extract_code_from_response(response):
     
     # 提取代码块（严格格式要求）
     code_blocks = re.findall(
-        r'```\s*\n'  # 开始三引号
-        r'『[\w\s-]+』\.py\n'  # 文件名声明
-        r'((?:#[^\n]*\n)*\n.*?)'  # 捕获所有代码内容，包括依赖声明
+        r'```(?:python)?\s*\n'  # 开始三引号，可选的python标记
+        r'(?:『[\w\s-]+』\.py\n)?'  # 可选的文件名声明
+        r'(.*?)'  # 捕获所有代码内容
         r'```',  # 结束三引号
         response,
         flags=re.DOTALL
     )
     
     if not code_blocks:
-        # 如果严格格式匹配失败，尝试宽松匹配
-        code_blocks = re.findall(
-            r'```\s*\n?(.*?)\n?\s*```', 
-            response, 
-            flags=re.DOTALL
-        )
-    
-    if not code_blocks:
         return None, None
         
-    return code_blocks[0].strip(), suggested_filename
+    # 获取第一个代码块
+    code_content = code_blocks[0].strip()
+    
+    # 确保提取到依赖声明
+    if not any(line.startswith('# 依赖包：') for line in code_content.split('\n')):
+        console.print("[yellow]警告：未检测到依赖声明，可能会影响依赖安装[/yellow]")
+    
+    return code_content, suggested_filename
 
 def extract_imports(code_content):
     """使用AST解析器从代码中提取依赖，并从注释中提取版本信息"""
@@ -257,24 +256,12 @@ def extract_imports(code_content):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     lib = alias.name.split('.')[0]
-                    # 特殊处理 python-dotenv
-                    if lib == 'dotenv':
-                        if 'python-dotenv' not in {i.split('==')[0] for i in imports}:
-                            imports.add('python-dotenv')
-                    elif lib not in STANDARD_LIBS:
-                        # 如果在注释中没有指定版本，则只添加包名
-                        if lib not in {i.split('==')[0] for i in imports}:
-                            imports.add(lib)
+                    if lib not in STANDARD_LIBS:
+                        imports.add(lib)
             elif isinstance(node, ast.ImportFrom):
                 lib = node.module.split('.')[0] if node.module else ''
-                # 特殊处理 python-dotenv
-                if lib == 'dotenv':
-                    if 'python-dotenv' not in {i.split('==')[0] for i in imports}:
-                        imports.add('python-dotenv')
-                elif lib and lib not in STANDARD_LIBS:
-                    # 如果在注释中没有指定版本，则只添加包名
-                    if lib not in {i.split('==')[0] for i in imports}:
-                        imports.add(lib)
+                if lib and lib not in STANDARD_LIBS:
+                    imports.add(lib)
     except SyntaxError:
         console.print("\n[red]⚠️ 代码解析错误，无法提取依赖[/red]")
     
@@ -769,47 +756,66 @@ def save_and_execute_code(code_content, execute=True):
             if not is_installed(lib)
         ]
         
+        # 先保存代码
+        if suggested_filename:
+            if not suggested_filename.endswith('.py'):
+                suggested_filename += '.py'
+            filename = os.path.join(code_dir, suggested_filename)
+        else:
+            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+            
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(code_content)
+        
+        # 如果有依赖且安装失败，保存依赖信息并退出
         if required_libs and not install_dependencies(required_libs):
             console.print("\n[red]⚠️ 部分依赖安装失败,代码可能无法正常运行[/red]")
+            save_pending_dependencies(filename, required_libs)
             return False
 
-        # 获取虚拟环境Python解释器
-        python_path = setup_virtual_env()
-        
-        # 执行代码 - 使用新的控制台窗口
-        console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
-        try:
-            if sys.platform == "win32":
-                # Windows下使用相对路径执行Python文件
-                venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
-                if not os.path.exists(venv_python):
-                    console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
-                    return False
-                
-                # 使用相对路径构建命令
-                rel_python = os.path.relpath(venv_python)
-                rel_filename = os.path.relpath(filename)
-                cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
-                subprocess.Popen(cmd, shell=True)
-            else:
-                if sys.platform == "darwin":  # macOS
-                    subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
-                else:  # Linux
-                    terminals = ['gnome-terminal', 'xterm', 'konsole']
-                    for term in terminals:
-                        try:
-                            subprocess.Popen([term, '--', python_path, filename])
-                            break
-                        except FileNotFoundError:
-                            continue
-                    else:
-                        # 如果没有找到图形终端，使用当前终端运行
-                        subprocess.Popen([python_path, filename])
-        except Exception as e:
-            console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
-            return False
+        if execute:
+            # 获取虚拟环境Python解释器
+            python_path = setup_virtual_env()
+            
+            # 执行代码
+            console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
+            try:
+                if sys.platform == "win32":
+                    # Windows下使用相对路径执行Python文件
+                    venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
+                    if not os.path.exists(venv_python):
+                        console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
+                        return False
+                    
+                    # 使用相对路径构建命令
+                    rel_python = os.path.relpath(venv_python)
+                    rel_filename = os.path.relpath(filename)
+                    cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
+                    subprocess.Popen(cmd, shell=True)
+                else:
+                    if sys.platform == "darwin":  # macOS
+                        subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
+                    else:  # Linux
+                        terminals = ['gnome-terminal', 'xterm', 'konsole']
+                        for term in terminals:
+                            try:
+                                subprocess.Popen([term, '--', python_path, filename])
+                                break
+                            except FileNotFoundError:
+                                continue
+                        else:
+                            # 如果没有找到图形终端，使用当前终端运行
+                            subprocess.Popen([python_path, filename])
+            except Exception as e:
+                console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
+                return False
+            
+            console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
+            return True
+        else:
+            console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
+            return True
 
-        return True
     except Exception as e:
         console.print(f"\n[red]⚠️ 异常: {str(e)}[/red]")
         return False
@@ -1264,63 +1270,39 @@ from datetime import datetime
                     if code_result and code_result[0]:
                         code_content, suggested_filename = code_result
                         
-                        # 创建代码保存目录
-                        code_dir = "代码工具库"
-                        if not os.path.exists(code_dir):
-                            os.makedirs(code_dir)
-                            
-                        # 生成文件名
-                        if suggested_filename:
-                            if not suggested_filename.endswith('.py'):
-                                suggested_filename += '.py'
-                            filename = os.path.join(code_dir, suggested_filename)
-                        else:
-                            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
-                            
-                        # 保存代码
-                        with open(filename, "w", encoding="utf-8") as f:
-                            f.write(code_content)
-                            
-                        if execute_code:
-                            # 获取虚拟环境Python解释器
-                            python_path = setup_virtual_env()
-                            
-                            # 执行代码
-                            console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
-                            try:
-                                if sys.platform == "win32":
-                                    # Windows下使用相对路径执行Python文件
-                                    venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
-                                    if not os.path.exists(venv_python):
-                                        console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
-                                        continue
-                                    
-                                    # 使用相对路径构建命令
-                                    rel_python = os.path.relpath(venv_python)
-                                    rel_filename = os.path.relpath(filename)
-                                    cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
-                                    subprocess.Popen(cmd, shell=True)
-                                else:
-                                    if sys.platform == "darwin":  # macOS
-                                        subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
-                                    else:  # Linux
-                                        terminals = ['gnome-terminal', 'xterm', 'konsole']
-                                        for term in terminals:
-                                            try:
-                                                subprocess.Popen([term, '--', python_path, filename])
-                                                break
-                                            except FileNotFoundError:
-                                                continue
-                                        else:
-                                            # 如果没有找到图形终端，使用当前终端运行
-                                            subprocess.Popen([python_path, filename])
-                            except Exception as e:
-                                console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
-                            else:
-                                console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
-                        else:
-                            console.print("\n[yellow]⚠️ 未检测到有效代码块[/yellow]")
+                        # 先检查依赖
+                        required_libs = extract_imports(code_content)
+                        if required_libs:
+                            console.print("\n[yellow]正在检查依赖...[/yellow]")
+                            if not install_dependencies(required_libs):
+                                console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                                continue
+                        
+                        # 安装依赖成功后再保存和执行代码
+                        save_and_execute_code((code_content, suggested_filename), execute_code)
+                    else:
+                        console.print("\n[yellow]⚠️ 未找到可执行的代码[/yellow]")
                     
+                # 处理run命令
+                if user_input == "run":
+                    # 检查最后一次对话是否包含代码
+                    if messages and len(messages) >= 2:
+                        last_response = messages[-1]["content"]
+                        code_result = extract_code_from_response(last_response)
+                        if code_result and code_result[0]:
+                            code_content, suggested_filename = code_result
+                            # 提取并安装依赖
+                            required_libs = extract_imports(code_content)
+                            if required_libs:
+                                console.print("\n[yellow]正在检查依赖...[/yellow]")
+                                if not install_dependencies(required_libs):
+                                    console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                                    continue
+                            save_and_execute_code((code_content, suggested_filename), True)
+                        else:
+                            console.print("\n[yellow]⚠️ 未找到可执行的代码[/yellow]")
+                    continue
+                
             except KeyboardInterrupt:
                 console.print("\n[yellow]🛑 操作已中断[/yellow]")
                 break
