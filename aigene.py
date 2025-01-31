@@ -41,8 +41,13 @@ QWEN_CLIENT = 1
 current_client_type = 0  # 修改这里的值来切换默认客户端: DEEPSEEK_CLIENT(0) 或 QWEN_CLIENT(1)
 
 try:
-    # 获取API密钥
+    # 获取并验证API密钥
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not deepseek_api_key:
+        console.print("\n[red]❌ DEEPSEEK_API_KEY 未在.env文件中设置[/red]")
+        console.print("[yellow]请在.env文件中添加正确的API key，格式如下：[/yellow]")
+        console.print("[blue]DEEPSEEK_API_KEY=your_api_key_here[/blue]")
+        sys.exit(1)
     
     # 初始化 DeepSeek 客户端
     deepseek_client = openai.OpenAI(
@@ -50,11 +55,18 @@ try:
         base_url="https://api.deepseek.com/v1"
     )
     
-    # 初始化 通义千问 客户端
+    # 初始化 通义千问 客户端（仅在需要时）
+    qwen_api_key = os.getenv("DASHSCOPE_API_KEY")
+    if current_client_type == QWEN_CLIENT and not qwen_api_key:
+        console.print("\n[red]❌ DASHSCOPE_API_KEY 未在.env文件中设置[/red]")
+        console.print("[yellow]请在.env文件中添加正确的API key，格式如下：[/yellow]")
+        console.print("[blue]DASHSCOPE_API_KEY=your_api_key_here[/blue]")
+        sys.exit(1)
+    
     qwen_client = openai.OpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY"),  # 直接从环境变量获取
+        api_key=qwen_api_key if qwen_api_key else "dummy_key",
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
-    )
+    ) if current_client_type == QWEN_CLIENT else None
     
     # 根据当前客户端类型选择客户端
     client = deepseek_client if current_client_type == DEEPSEEK_CLIENT else qwen_client
@@ -71,11 +83,11 @@ except ValueError as e:
         console.print("[blue]DASHSCOPE_API_KEY=your_api_key_here[/blue]")
         sys.exit(1)
 except (openai.AuthenticationError, TypeError) as e:
-    console.print("\n[red]❌ API key(密钥)无效,请检查您的API key是否正确[/red]")
-    console.print("\n[red]❌ to开发人员，也可能是|解释器|环境|依赖版本|问题[/red]")
-    console.print("\n[yellow]当前API key值：[/yellow]")
+    console.print("\n[red]❌ API key(密钥)无效,请检查您的API key是否正确")
+    console.print("\n[red]❌ to开发人员，也可能是|解释器|环境|依赖版本|问题")
+    console.print("\n[yellow]当前API key值：")
     console.print(f"[blue]{deepseek_api_key if current_client_type == DEEPSEEK_CLIENT else os.getenv('DASHSCOPE_API_KEY')}[/blue]")
-    console.print("\n[yellow]原始错误信息：[/yellow]")
+    console.print("\n[yellow]原始错误信息：")
     console.print(f"[red]{type(e).__name__}: {str(e)}[/red]")
 
     sys.exit(1)
