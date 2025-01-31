@@ -48,58 +48,85 @@ def get_local_version():
         print(f"❌ 读取本地版本失败: {e}")
         return "0" * 40
 
-def check_update(show_detail=False):
+def check_update(show_detail=True):  # 默认显示详细信息
     """检查更新"""
     try:
         # 获取本地版本
         local_version = get_local_version()
         if show_detail:
+            print(f"当前本地版本: {local_version}")
             print(f"正在连接服务器 {BASE_URL}/check_update ...")
         
-        response = requests.get(f"{BASE_URL}/check_update", timeout=10)
+        # 设置超时时间和重试次数
+        session = requests.Session()
+        session.mount('http://', requests.adapters.HTTPAdapter(max_retries=3))
+        
+        try:
+            response = session.get(f"{BASE_URL}/check_update", timeout=5)
+        except requests.exceptions.Timeout:
+            print("❌ 连接服务器超时，请检查网络连接")
+            log_error("连接服务器超时")
+            return None
+        except requests.exceptions.ConnectionError:
+            print("❌ 无法连接到服务器，请检查网络连接")
+            log_error("无法连接到服务器")
+            return None
+            
         if show_detail:
             print(f"服务器响应状态码: {response.status_code}")
         
         if response.status_code == 200:
-            update_info = response.json()
+            try:
+                update_info = response.json()
+            except json.JSONDecodeError:
+                print("❌ 服务器返回的数据格式不正确（非JSON格式）")
+                log_error(f"服务器返回非JSON数据: {response.text}")
+                return None
+                
             if show_detail:
                 print(f"服务器返回数据: {update_info}")
                 
             # 确保返回的数据包含所需的字段
-            if all(key in update_info for key in ['current_version', 'last_version', 'has_update', 'error']):
-                # 添加本地版本比较逻辑
-                latest_version = update_info['last_version']  # 使用 last_version
-                if local_version != latest_version:  # 比较本地版本和最新版本
-                    update_info['has_update'] = True
-                    if show_detail:
-                        print(f"\n当前版本: {local_version}")
-                        print(f"最新版本: {latest_version}")
-                return update_info
-            else:
-                print("❌ 服务器返回的数据格式不正确")
-                if show_detail:
-                    print(f"期望字段: current_version, last_version, has_update, error")
-                    print(f"实际数据: {update_info}")
+            required_fields = ['current_version', 'last_version', 'has_update', 'error']
+            missing_fields = [field for field in required_fields if field not in update_info]
+            
+            if missing_fields:
+                print(f"❌ 服务器返回的数据缺少必要字段: {', '.join(missing_fields)}")
+                log_error(f"服务器返回数据缺少字段: {missing_fields}")
                 return None
+                
+            # 添加本地版本比较逻辑
+            latest_version = update_info['last_version']
+            if local_version != latest_version:
+                update_info['has_update'] = True
+                if show_detail:
+                    print(f"\n当前版本: {local_version}")
+                    print(f"最新版本: {latest_version}")
+                    if update_info['has_update']:
+                        print("\n[发现新版本]")
+            else:
+                if show_detail:
+                    print("\n✅ 当前已是最新版本")
+                    
+            return update_info
+            
         elif response.status_code == 404:
             print("❌ 远程仓库不存在")
+            log_error("远程仓库不存在")
         else:
             print(f"❌ 检查更新失败: HTTP {response.status_code}")
             if show_detail:
                 print(f"响应内容: {response.text}")
+            log_error(f"检查更新失败: HTTP {response.status_code}, 响应: {response.text}")
         return None
-    except requests.exceptions.Timeout:
-        print("❌ 连接服务器超时，请检查网络连接")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"❌ 检查更新时发生网络错误: {e}")
-        return None
+        
     except Exception as e:
         print(f"❌ 检查更新时发生错误: {e}")
         if show_detail:
             print("错误详细信息:")
             import traceback
             traceback.print_exc()
+        log_error(f"检查更新异常: {str(e)}\n{traceback.format_exc()}")
         return None
 
 def download_and_update():

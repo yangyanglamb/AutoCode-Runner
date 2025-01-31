@@ -1007,20 +1007,30 @@ def check_for_updates():
         
         ensure_version_file()
         
-        # 检查更新，不显示详细信息.
-        update_info = check_update(show_detail=False)
+        console.print("\n[yellow]正在检查更新...[/yellow]")
+        
+        # 检查更新，显示详细信息
+        update_info = check_update(show_detail=True)
+        
+        if update_info is None:
+            console.print("\n[yellow]是否重试检查更新？(y/n)[/yellow]")
+            retry = input().strip().lower()
+            if retry in ['y', 'yes']:
+                console.print("\n[yellow]正在重新检查更新...[/yellow]")
+                update_info = check_update(show_detail=True)
+        
         if update_info and update_info.get('has_update'):
-            latest_version = update_info.get('last_version', '')  # 使用 last_version
+            latest_version = update_info.get('last_version', '')
             
             # 询问是否更新
             while True:
-                choice = input("检查到更新，是否更新到最新版本？(y/n): ").lower().strip()
+                choice = input("\n检查到更新，是否更新到最新版本？(y/n): ").lower().strip()
                 if choice in ['y', 'yes']:
                     console.print("[green]开始更新...[/green]")
                     if download_and_update():
                         # 更新成功后，更新版本号为最新版本号
                         with open(os.path.join(current_dir, "version.txt"), "w", encoding="utf-8") as f:
-                            f.write(latest_version)  # 使用 last_version
+                            f.write(latest_version)
                         console.print("[green]✓ 更新完成！请重启程序以应用更新。[/green]")
                     else:
                         console.print("[red]× 更新失败！[/red]")
@@ -1029,10 +1039,15 @@ def check_for_updates():
                     console.print("[yellow]已取消更新[/yellow]")
                     break
                 else:
-                    console.print("无效的输入，请输入 y(表示是) 或 n(表示否)")
+                    console.print("[red]无效的输入，请输入 y 或 n[/red]")
             
     except Exception as e:
         console.print(f"\n[red]更新检查失败: {str(e)}[/red]")
+        console.print("[yellow]建议：[/yellow]")
+        console.print("1. 检查网络连接")
+        console.print("2. 确认是否可以访问更新服务器")
+        console.print("3. 检查version.txt文件是否存在且未损坏")
+        console.print("4. 如果问题持续，可以尝试重新下载程序")
 
 def clear_terminal():
     """清除终端内容"""
