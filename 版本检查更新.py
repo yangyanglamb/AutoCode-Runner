@@ -30,13 +30,22 @@ VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version
 # API基础URL
 BASE_URL = "http://43.242.201.140:5000"
 
+def ensure_version_file():
+    """确保版本文件存在"""
+    try:
+        if not os.path.exists(VERSION_FILE):
+            with open(VERSION_FILE, "w", encoding="utf-8") as f:
+                f.write("0" * 40)  # 写入初始版本号
+            print(f"✅ 已创建版本文件: {VERSION_FILE}")
+    except Exception as e:
+        print(f"❌ 创建版本文件失败: {e}")
+
 def get_local_version():
     """获取本地版本号（hash）"""
     try:
-        if os.path.exists(VERSION_FILE):
-            with open(VERSION_FILE, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        return "0" * 40  # 如果文件不存在，返回一个初始hash（40个0）
+        ensure_version_file()  # 确保文件存在
+        with open(VERSION_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
     except Exception as e:
         print(f"❌ 读取本地版本失败: {e}")
         return "0" * 40
@@ -194,6 +203,9 @@ def main():
     try:
         # 检查并处理待更新的文件
         check_pending_updates()
+        
+        # 确保版本文件存在
+        ensure_version_file()
         
         # 获取本地版本
         local_version = get_local_version()
