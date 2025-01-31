@@ -250,17 +250,27 @@ def extract_imports(code_content):
                         if dep and dep not in STANDARD_LIBS:
                             imports.add(dep)
 
-        # 从导入语句中提取依赖
+        # 添加包名映射
+        package_mapping = {
+            'docx': 'python-docx',  # 将 docx 映射到 python-docx
+            # 可以添加其他需要映射的包
+        }
+        
+        # 处理导入语句中的依赖
         tree = ast.parse(code_content)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     lib = alias.name.split('.')[0]
                     if lib not in STANDARD_LIBS:
+                        # 检查是否需要替换包名
+                        lib = package_mapping.get(lib, lib)
                         imports.add(lib)
             elif isinstance(node, ast.ImportFrom):
                 lib = node.module.split('.')[0] if node.module else ''
                 if lib and lib not in STANDARD_LIBS:
+                    # 检查是否需要替换包名
+                    lib = package_mapping.get(lib, lib)
                     imports.add(lib)
     except SyntaxError:
         console.print("\n[red]⚠️ 代码解析错误，无法提取依赖[/red]")
@@ -1112,6 +1122,10 @@ def main():
     try:
         global current_client_type, client
         
+        # 添加变量保存最后生成的代码
+        last_generated_code = None
+        last_suggested_filename = None
+        
         # 检查程序更新
         check_for_updates()
         
@@ -1208,6 +1222,7 @@ from datetime import datetime
 
 ## 环境约束
 - 优先选用轻量级依赖包，不需要额外系统依赖
+- 避免使用过时的包
 - 复杂需求提示脚本能力边界
 - 注意：如果需要安装系统级依赖（如MiKTeX、FFmpeg等），请提示用户：
 1. 先安装所需的系统级依赖
@@ -1269,8 +1284,11 @@ from datetime import datetime
                     code_result = extract_code_from_response(response["content"])
                     if code_result and code_result[0]:
                         code_content, suggested_filename = code_result
+                        # 保存最后生成的代码
+                        last_generated_code = code_content
+                        last_suggested_filename = suggested_filename
                         
-                        # 先检查依赖
+                        # 提取并安装依赖
                         required_libs = extract_imports(code_content)
                         if required_libs:
                             console.print("\n[yellow]正在检查依赖...[/yellow]")
@@ -1285,22 +1303,17 @@ from datetime import datetime
                     
                 # 处理run命令
                 if user_input == "run":
-                    # 检查最后一次对话是否包含代码
-                    if messages and len(messages) >= 2:
-                        last_response = messages[-1]["content"]
-                        code_result = extract_code_from_response(last_response)
-                        if code_result and code_result[0]:
-                            code_content, suggested_filename = code_result
-                            # 提取并安装依赖
-                            required_libs = extract_imports(code_content)
-                            if required_libs:
-                                console.print("\n[yellow]正在检查依赖...[/yellow]")
-                                if not install_dependencies(required_libs):
-                                    console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
-                                    continue
-                            save_and_execute_code((code_content, suggested_filename), True)
-                        else:
-                            console.print("\n[yellow]⚠️ 未找到可执行的代码[/yellow]")
+                    if last_generated_code:
+                        # 提取并安装依赖
+                        required_libs = extract_imports(last_generated_code)
+                        if required_libs:
+                            console.print("\n[yellow]正在检查依赖...[/yellow]")
+                            if not install_dependencies(required_libs):
+                                console.print("\n[red]⚠️ 部分依赖安装失败，代码可能无法正常运行[/red]")
+                                continue
+                        save_and_execute_code((last_generated_code, last_suggested_filename), True)
+                    else:
+                        console.print("\n[yellow]⚠️ 没有找到可以执行的代码[/yellow]")
                     continue
                 
             except KeyboardInterrupt:
