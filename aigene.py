@@ -933,7 +933,7 @@ def check_for_updates():
         # 打印当前版本信息
         console.print(f"\n[blue]当前程序版本: v{local_version}[/blue]")
         
-        # 检查更新 - 不传递参数
+        # 检查更新 - 不传递参数.
         update_info = check_update()  # 移除 local_version 参数
         if update_info and update_info.get('has_update'):
             latest_version = update_info.get('current_version', '')
