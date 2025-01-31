@@ -10,24 +10,18 @@ import zipfile
 import requests
 from pathlib import Path
 from datetime import datetime
+import subprocess
 
-# 在导入其他包之前，确保使用正确的Python环境
-def ensure_correct_python():
-    """确保使用正确的Python环境"""
+# 添加日志文件
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "update_log.txt")
+
+def log_error(message):
+    """记录错误信息到文件"""
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        python_path = os.path.join(os.path.dirname(current_dir), "venv3.9", "Scripts", "python.exe")
-        
-        if os.path.exists(python_path) and sys.executable.lower() != python_path.lower():
-            print(f"正在切换到正确的Python环境...")
-            os.execv(python_path, [python_path] + sys.argv)
-    except Exception as e:
-        print(f"⚠️ Python环境切换失败: {e}")
-        # 继续执行，不中断程序
-
-# 先执行环境切换
-if __name__ == "__main__":
-    ensure_correct_python()
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except:
+        pass
 
 # 版本信息文件路径
 VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
@@ -206,17 +200,26 @@ def check_pending_updates():
 def main():
     """主函数"""
     try:
+        print("开始检查更新...")
+        
         # 检查并处理待更新的文件
+        print("检查待更新文件...")
         check_pending_updates()
         
         # 确保版本文件存在
+        print("检查版本文件...")
         ensure_version_file()
         
         # 获取本地版本
+        print("获取本地版本...")
         local_version = get_local_version()
+        print(f"当前本地版本: {local_version}")
         
+        print("连接服务器检查更新...")
         update_info = check_update()
         if update_info is None:
+            print("无法获取更新信息，程序将退出")
+            input("按回车键退出...") # 添加暂停，查看错误信息
             return
             
         # 检查是否需要更新
@@ -234,15 +237,29 @@ def main():
                         with open(VERSION_FILE, "w", encoding="utf-8") as f:
                             f.write(update_info['current_version'])
                         print("🎉 程序已更新完成，请重启程序！")
+                        input("按回车键退出...") # 添加暂停，等待用户确认
                     break
                 elif choice in ['n', 'no']:
                     print("已取消更新")
+                    input("按回车键退出...") # 添加暂停，等待用户确认
                     break
                 else:
                     print("无效的输入，请输入 y 或 n")
 
     except Exception as e:
         print(f"❌ 程序运行出错: {e}")
+        print("错误详细信息:")
+        import traceback
+        traceback.print_exc()
+        input("按回车键退出...") # 添加暂停，查看错误信息
 
 if __name__ == "__main__":
-    main() 
+    try:
+        main()
+    except Exception as e:
+        error_msg = f"程序运行出错: {str(e)}\n"
+        import traceback
+        error_msg += traceback.format_exc()
+        log_error(error_msg)
+        print(error_msg)
+        input("按回车键退出...") 

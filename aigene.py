@@ -917,52 +917,32 @@ def get_multiline_input():
 def check_for_updates():
     """检查程序更新"""
     try:
-        # 导入版本检查模块（修正导入路径）
-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from version_check_update import get_local_version, check_update, download_and_update, ensure_version_file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # 确保版本文件存在
-        ensure_version_file()
-        
-        # 获取本地版本
-        local_version = get_local_version()
-
-        # 检查更新
-        update_info = check_update()
-        
-        if update_info is None:
+        if not os.path.exists(os.path.join(current_dir, "version_check_update.py")):
+            console.print("\n[yellow]⚠️ 未找到更新检查模块，跳过更新检查[/yellow]")
             return
             
-        # 检查是否需要更新
-        if update_info["last_version"] != local_version:
-            console.print(f"\n[yellow]发现新版本[/yellow]")
-            console.print(f"[yellow]当前版本: {local_version}[/yellow]")
-            console.print(f"[yellow]最新版本: {update_info['current_version']}[/yellow]")
+        sys.path.insert(0, current_dir)
+        from version_check_update import get_local_version, check_update, download_and_update, ensure_version_file
+        sys.path.pop(0)
+        
+        ensure_version_file()
+        local_version = get_local_version()
+        
+        # 打印当前版本信息
+        console.print(f"\n[blue]当前程序版本: v{local_version}[/blue]")
+        
+        # 检查更新 - 不传递参数
+        update_info = check_update()  # 移除 local_version 参数
+        if update_info and update_info.get('has_update'):
+            latest_version = update_info.get('current_version', '')
+            console.print(f"[green]发现新版本: v{latest_version}[/green]")
+        else:
+            console.print("[green]✓ 当前已是最新版本[/green]")
             
-            # 询问用户是否更新
-            while True:
-                console.print("\n是否更新到最新版本？(y/n): ", end="")
-                choice = input().lower().strip()
-                if choice in ['y', 'yes']:
-                    if download_and_update():
-                        # 更新成功后，更新版本号
-                        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
-                        with open(version_file, "w", encoding="utf-8") as f:
-                            f.write(update_info['current_version'])
-                        # 更新成功后退出程序
-                        console.print("\n[green]🎉 程序已更新完成，请重启程序！[/green]")
-                        console.print("[yellow]10秒后自动退出...[/yellow]")
-                        time.sleep(10)
-                        sys.exit(0)
-                    break
-                elif choice in ['n', 'no']:
-                    console.print("[yellow]已取消更新[/yellow]")
-                    break
-                else:
-                    console.print("[red]无效的输入，请输入 y 或 n[/red]")
-
     except Exception as e:
-        console.print(f"\n[red]❌ 检查更新失败: {str(e)}[/red]")
+        console.print(f"\n[red]更新检查失败: {str(e)}[/red]")
 
 def main():
     try:
