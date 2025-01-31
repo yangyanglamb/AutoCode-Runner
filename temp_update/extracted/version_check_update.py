@@ -105,11 +105,11 @@ def check_update(show_detail=False):
 def download_and_update():
     """下载并更新程序"""
     try:
-        # 获取当前文件所在目录
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # 获取项目根目录
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         # 创建临时目录时使用 Path 对象以提高跨平台兼容性
-        temp_dir = Path(current_dir) / "temp_update"
+        temp_dir = Path(root_dir) / "temp_update"
         temp_dir.mkdir(parents=True, exist_ok=True)
             
         update_zip = temp_dir / "update.zip"
@@ -141,7 +141,7 @@ def download_and_update():
         def copy_files(src_dir, dst_dir):
             # 获取当前运行的Python文件的绝对路径
             current_file = os.path.abspath(__file__)
-            aigene_file = os.path.join(current_dir, "aigene.py")
+            aigene_file = os.path.join(root_dir, "aigene.py")
             
             for item in os.listdir(src_dir):
                 src_path = os.path.join(src_dir, item)
@@ -163,18 +163,18 @@ def download_and_update():
                         os.makedirs(dst_path)
                     copy_files(src_path, dst_path)
 
-        # 从临时目录复制文件到当前目录
+        # 从临时目录复制文件到项目目录
         print("正在更新文件...")
-        copy_files(str(extract_dir), current_dir)
+        copy_files(str(extract_dir), root_dir)
 
         # 将正在运行的文件标记为待更新
-        pending_update_file = os.path.join(current_dir, "pending_update.json")
+        pending_update_file = os.path.join(root_dir, "pending_update.json")
         pending_files = {
             "files": [
-                os.path.basename(__file__),
+                os.path.relpath(__file__, root_dir),
                 "aigene.py"
             ],
-            "source_dir": str(extract_dir),
+            "source_dir": str(extract_dir),  # 将 Path 对象转换为字符串
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         with open(pending_update_file, "w", encoding="utf-8") as f:
@@ -255,7 +255,7 @@ def main():
             
             # 询问用户是否更新
             while True:
-                choice = input("检查到更新，是否更新到最新版本？(y/n): ").lower().strip()
+                choice = input("是否更新到最新版本？(y/n): ").lower().strip()
                 if choice in ['y', 'yes']:
                     if download_and_update():
                         # 更新成功后，更新版本号为最新版本号

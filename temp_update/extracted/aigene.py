@@ -936,7 +936,7 @@ def check_for_updates():
             
             # 询问是否更新
             while True:
-                choice = input("检查到更新，是否更新到最新版本？(y/n): ").lower().strip()
+                choice = input("是否更新到最新版本？(y/n): ").lower().strip()
                 if choice in ['y', 'yes']:
                     console.print("[green]开始更新...[/green]")
                     if download_and_update():
