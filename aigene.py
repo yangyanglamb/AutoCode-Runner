@@ -1089,9 +1089,62 @@ from datetime import datetime
                         code_result = extract_code_from_response(last_response)
                         if code_result and code_result[0]:
                             execute = user_input == "run"  # 如果是run命令则执行，s命令则只保存
-                            save_thread = Thread(target=save_and_execute_code, args=(code_result, execute))
-                            save_thread.start()
-                            save_thread.join()
+                            code_content, suggested_filename = code_result
+                            
+                            # 创建代码保存目录
+                            code_dir = "代码工具库"
+                            if not os.path.exists(code_dir):
+                                os.makedirs(code_dir)
+                                
+                            # 生成文件名
+                            if suggested_filename:
+                                if not suggested_filename.endswith('.py'):
+                                    suggested_filename += '.py'
+                                filename = os.path.join(code_dir, suggested_filename)
+                            else:
+                                filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+                                
+                            # 保存代码
+                            with open(filename, "w", encoding="utf-8") as f:
+                                f.write(code_content)
+                                
+                            if execute:
+                                # 获取虚拟环境Python解释器
+                                python_path = setup_virtual_env()
+                                
+                                # 执行代码
+                                console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
+                                try:
+                                    if sys.platform == "win32":
+                                        # Windows下使用相对路径执行Python文件
+                                        venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
+                                        if not os.path.exists(venv_python):
+                                            console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
+                                            continue
+                                        
+                                        # 使用相对路径构建命令
+                                        rel_python = os.path.relpath(venv_python)
+                                        rel_filename = os.path.relpath(filename)
+                                        cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
+                                        subprocess.Popen(cmd, shell=True)
+                                    else:
+                                        if sys.platform == "darwin":  # macOS
+                                            subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
+                                        else:  # Linux
+                                            terminals = ['gnome-terminal', 'xterm', 'konsole']
+                                            for term in terminals:
+                                                try:
+                                                    subprocess.Popen([term, '--', python_path, filename])
+                                                    break
+                                                except FileNotFoundError:
+                                                    continue
+                                            else:
+                                                # 如果没有找到图形终端，使用当前终端运行
+                                                subprocess.Popen([python_path, filename])
+                                except Exception as e:
+                                    console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
+                            else:
+                                console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
                             continue
                     console.print("\n[yellow]⚠️ 没有找到上一次生成的代码[/yellow]")
                     continue
@@ -1112,14 +1165,64 @@ from datetime import datetime
                 if any(kw in cleaned_input for kw in ["写", "代码", "生成"]):
                     code_result = extract_code_from_response(response["content"])
                     if code_result and code_result[0]:
-                        # 保存最后生成的代码
+                        code_content, suggested_filename = code_result
+                        
+                        # 创建代码保存目录
+                        code_dir = "代码工具库"
+                        if not os.path.exists(code_dir):
+                            os.makedirs(code_dir)
+                            
+                        # 生成文件名
+                        if suggested_filename:
+                            if not suggested_filename.endswith('.py'):
+                                suggested_filename += '.py'
+                            filename = os.path.join(code_dir, suggested_filename)
+                        else:
+                            filename = os.path.join(code_dir, f"generated_{datetime.now().strftime('%Y%m%d%H%M%S')}.py")
+                            
+                        # 保存代码
+                        with open(filename, "w", encoding="utf-8") as f:
+                            f.write(code_content)
+                            
                         if execute_code:
-                            # 等待代码保存完成
-                            save_thread = Thread(target=save_and_execute_code, args=(code_result, execute_code))
-                            save_thread.start()
-                            save_thread.join()  # 等待线程完成
-                    else:
-                        console.print("\n[yellow]⚠️ 未检测到有效代码块[/yellow]")
+                            # 获取虚拟环境Python解释器
+                            python_path = setup_virtual_env()
+                            
+                            # 执行代码
+                            console.print("\n[yellow]🚀 正在新窗口中启动程序(Python 3.9)...[/yellow]")
+                            try:
+                                if sys.platform == "win32":
+                                    # Windows下使用相对路径执行Python文件
+                                    venv_python = os.path.join("venv3.9", "Scripts", "python.exe")
+                                    if not os.path.exists(venv_python):
+                                        console.print(f"\n[red]⚠️ 虚拟环境Python解释器不存在: {venv_python}[/red]")
+                                        continue
+                                    
+                                    # 使用相对路径构建命令
+                                    rel_python = os.path.relpath(venv_python)
+                                    rel_filename = os.path.relpath(filename)
+                                    cmd = f'start cmd /c "{rel_python} {rel_filename} & pause"'
+                                    subprocess.Popen(cmd, shell=True)
+                                else:
+                                    if sys.platform == "darwin":  # macOS
+                                        subprocess.Popen(['open', '-a', 'Terminal', '--', python_path, filename])
+                                    else:  # Linux
+                                        terminals = ['gnome-terminal', 'xterm', 'konsole']
+                                        for term in terminals:
+                                            try:
+                                                subprocess.Popen([term, '--', python_path, filename])
+                                                break
+                                            except FileNotFoundError:
+                                                continue
+                                        else:
+                                            # 如果没有找到图形终端，使用当前终端运行
+                                            subprocess.Popen([python_path, filename])
+                            except Exception as e:
+                                console.print(f"\n[red]⚠️ 启动程序失败: {str(e)}[/red]")
+                            else:
+                                console.print(f"\n[green]✓ 代码已保存到: {filename}[/green]")
+                        else:
+                            console.print("\n[yellow]⚠️ 未检测到有效代码块[/yellow]")
                     
             except KeyboardInterrupt:
                 console.print("\n[yellow]🛑 操作已中断[/yellow]")
