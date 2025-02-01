@@ -231,8 +231,9 @@ def download_and_update():
 def check_pending_updates():
     """检查是否有待更新的文件"""
     try:
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        pending_update_file = os.path.join(root_dir, "pending_update.json")
+        # 改为与 download_and_update() 一致的路径逻辑
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        pending_update_file = os.path.join(current_dir, "pending_update.json")
         
         if not os.path.exists(pending_update_file):
             return
@@ -248,7 +249,7 @@ def check_pending_updates():
         # 更新待更新的文件
         for file in pending_files["files"]:
             src_path = os.path.join(source_dir, file)
-            dst_path = os.path.join(root_dir, file)
+            dst_path = os.path.join(current_dir, file)  # 同样使用 current_dir
             
             if os.path.exists(src_path):
                 # 如果目标文件存在，先删除
