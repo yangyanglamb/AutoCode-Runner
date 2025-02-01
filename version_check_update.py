@@ -87,7 +87,7 @@ def check_update(show_detail=True):  # 默认显示详细信息
                 print(f"服务器返回数据: {update_info}")
                 
             # 确保返回的数据包含所需的字段
-            required_fields = ['current_version', 'last_version', 'has_update', 'error']
+            required_fields = ['github版本', '可以下载', '服务器版本']
             missing_fields = [field for field in required_fields if field not in update_info]
             
             if missing_fields:
@@ -95,17 +95,20 @@ def check_update(show_detail=True):  # 默认显示详细信息
                 log_error(f"服务器返回数据缺少字段: {missing_fields}")
                 return None
                 
-            # 添加本地版本比较逻辑
-            latest_version = update_info['last_version']
-            if local_version != latest_version:
-                update_info['has_update'] = True
-                if show_detail:
-                    print(f"\n当前版本: {local_version}")
-                    print(f"最新版本: {latest_version}")
-                    if update_info['has_update']:
-                        print("\n[发现新版本]")
-            else:
-                if show_detail:
+            # 构建返回的更新信息
+            update_info = {
+                'current_version': local_version,
+                'last_version': update_info['github版本'],
+                'has_update': local_version != update_info['github版本'] and update_info['可以下载'],
+                'error': None
+            }
+                
+            if show_detail:
+                print(f"\n当前版本: {local_version}")
+                print(f"最新版本: {update_info['last_version']}")
+                if update_info['has_update']:
+                    print("\n[发现新版本]")
+                else:
                     print("\n✅ 当前已是最新版本")
                     
             return update_info

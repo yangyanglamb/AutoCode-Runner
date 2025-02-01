@@ -20,7 +20,6 @@ from rich.panel import Panel
 import json
 import requests
 import shutil
-print("更新成功")
 """
 在保留原有代码结构和功能的基础上，
 通过 CommandHandler 类来统一管理命令处理逻辑，
@@ -1030,23 +1029,29 @@ def check_for_updates():
         from version_check_update import get_local_version, check_update, download_and_update, ensure_version_file
         sys.path.pop(0)
         ensure_version_file()
-        console.print("\n[yellow]正在检查更新...[/yellow]")
-        update_info = check_update(show_detail=True)
+        console.print("\n[yellow]正在检查更新...[/yellow]", end="\r")
+        update_info = check_update(show_detail=False)  # 关闭详细输出
         if update_info is None:
             console.print("\n[yellow]是否重试检查更新？(y/n)[/yellow]")
             retry = input().strip().lower()
             if retry in ['y', 'yes']:
-                console.print("\n[yellow]正在重新检查更新...[/yellow]")
-                update_info = check_update(show_detail=True)
+                console.print("\n[yellow]正在重新检查更新...[/yellow]", end="\r")
+                update_info = check_update(show_detail=False)
+        
+        # 清除"正在检查更新..."的提示
+        console.print(" " * 50, end="\r")  # 用空格覆盖之前的文本
+        
         if update_info and update_info.get('has_update'):
-            latest_version = update_info.get('last_version', '')
+            console.print(f"\n当前版本: {update_info['current_version']}")
+            console.print(f"最新版本: {update_info['last_version']}")
+            console.print("\n[yellow]发现新版本[/yellow]")
             while True:
                 choice = input("\n检查到更新，是否更新到最新版本？(y/n): ").lower().strip()
                 if choice in ['y', 'yes']:
                     console.print("[green]开始更新...[/green]")
                     if download_and_update():
                         with open(os.path.join(current_dir, "version.txt"), "w", encoding="utf-8") as f:
-                            f.write(latest_version)
+                            f.write(update_info['last_version'])
                         console.print("[green]✓ 更新完成！请重启程序以应用更新。[/green]")
                     else:
                         console.print("[red]× 更新失败！[/red]")
