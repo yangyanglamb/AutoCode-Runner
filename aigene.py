@@ -1216,13 +1216,13 @@ class CommandHandler:
             "[cyan]r[/cyan]     切换深度思考模式\n"
             "[cyan]c[/cyan]     切换普通模式"
         )
-        console.print(Panel(help_text, title="[bold magenta]帮助信息[/bold magenta]", expand=False))
+        console.print(Panel(help_text, title="[bold magenta]命令菜单[/bold magenta]", expand=False))
 
     def show_main_menu(self):
         """显示主菜单(简略版)"""
         text = (
             "[bold yellow]AI 智能代码执行助手[/bold yellow]\n"
-            "命令示例: [cyan]cl[/cyan](清除记忆), [cyan]ls[/cyan](列出代码), [cyan]run[/cyan](执行代码) , [cyan]h[/cyan](帮助菜单)，输入中包含[cyan]写、代码、生成[/cyan]时会自动保存并执行"
+            "命令示例: [cyan]cl[/cyan](清除记忆), [cyan]ls[/cyan](列出代码), [cyan]run[/cyan](执行代码) , [cyan]h[/cyan](命令菜单)，输入中包含[cyan]写、代码、生成[/cyan]时会自动保存并执行"
         )
         console.print(Panel.fit(text, border_style="blue"))
 
