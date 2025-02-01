@@ -137,64 +137,92 @@ def download_and_update():
     temp_dir = None
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[调试] 当前目录: {current_dir}")
+        
         temp_dir = Path(current_dir) / "temp_update"
+        print(f"[调试] 临时目录: {temp_dir}")
+        
         temp_dir.mkdir(parents=True, exist_ok=True)
+        print("[调试] 已创建临时目录")
         
         update_zip = temp_dir / "update.zip"
+        print(f"[调试] 更新包路径: {update_zip}")
         
         # 下载更新包
         print("正在下载更新...")
         response = requests.get(f"{BASE_URL}/download", stream=True)
         if response.status_code != 200:
-            print(f"❌ 下载失败: HTTP {response.status_code}")
+            error_msg = f"❌ 下载失败: HTTP {response.status_code}"
+            print(error_msg)
+            log_error(error_msg)
             return False
 
         # 保存更新包到临时目录
+        print("[调试] 开始保存更新包...")
         with open(update_zip, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
+        print("[调试] 更新包保存完成")
 
         # 解压更新包
         print("正在解压更新包...")
         with zipfile.ZipFile(str(update_zip), 'r') as zip_ref:
             # 解压到临时目录
             extract_dir = temp_dir / "extracted"
+            print(f"[调试] 解压目录: {extract_dir}")
+            
             if extract_dir.exists():
+                print("[调试] 清理已存在的解压目录")
                 shutil.rmtree(str(extract_dir))
             extract_dir.mkdir(parents=True, exist_ok=True)
+            print("[调试] 开始解压文件...")
             zip_ref.extractall(str(extract_dir))
+            print("[调试] 文件解压完成")
 
         # 复制更新文件
         def copy_files(src_dir, dst_dir):
+            print(f"[调试] 开始复制文件 从 {src_dir} 到 {dst_dir}")
             # 获取当前运行的Python文件的绝对路径
             current_file = os.path.abspath(__file__)
             aigene_file = os.path.join(current_dir, "aigene.py")
+            print(f"[调试] 当前运行文件: {current_file}")
+            print(f"[调试] aigene文件: {aigene_file}")
             
             for item in os.listdir(src_dir):
                 src_path = os.path.join(src_dir, item)
                 dst_path = os.path.join(dst_dir, item)
+                print(f"[调试] 处理文件: {item}")
+                print(f"[调试] 源路径: {src_path}")
+                print(f"[调试] 目标路径: {dst_path}")
                 
                 if os.path.isfile(src_path):
                     # 跳过正在运行的文件
                     if os.path.abspath(dst_path) in [current_file, aigene_file]:
-                        print(f"跳过更新正在运行的文件: {item}")
+                        print(f"[调试] 跳过更新正在运行的文件: {item}")
                         continue
                         
                     try:
                         # 如果目标文件存在，先删除
                         if os.path.exists(dst_path):
+                            print(f"[调试] 删除已存在的目标文件: {dst_path}")
                             os.remove(dst_path)
+                        print(f"[调试] 开始复制文件: {item}")
                         shutil.copy2(src_path, dst_path)
                         print(f"更新文件: {item}")
-                    except PermissionError:
-                        print(f"无法更新文件(权限不足): {item}")
+                    except PermissionError as e:
+                        error_msg = f"无法更新文件(权限不足): {item}, 错误: {e}"
+                        print(f"❌ {error_msg}")
+                        log_error(error_msg)
                         continue
                     except Exception as e:
-                        print(f"更新文件失败: {item}, 错误: {e}")
+                        error_msg = f"更新文件失败: {item}, 错误: {e}"
+                        print(f"❌ {error_msg}")
+                        log_error(error_msg)
                         continue
                 elif os.path.isdir(src_path):
                     if not os.path.exists(dst_path):
+                        print(f"[调试] 创建目标目录: {dst_path}")
                         os.makedirs(dst_path)
                     copy_files(src_path, dst_path)
 
@@ -204,6 +232,8 @@ def download_and_update():
 
         # 将正在运行的文件标记为待更新
         pending_update_file = os.path.join(current_dir, "pending_update.json")
+        print(f"[调试] 待更新文件标记路径: {pending_update_file}")
+        
         pending_files = {
             "files": [
                 os.path.basename(__file__),
@@ -212,19 +242,25 @@ def download_and_update():
             "source_dir": str(extract_dir),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        print(f"[调试] 待更新文件信息: {json.dumps(pending_files, ensure_ascii=False, indent=2)}")
         
         try:
+            print("[调试] 开始写入待更新文件标记")
             with open(pending_update_file, "w", encoding="utf-8") as f:
                 json.dump(pending_files, f, ensure_ascii=False, indent=2)
+            print("[调试] 待更新文件标记写入完成")
         except Exception as e:
-            print(f"❌ 无法创建更新标记文件: {e}")
-            log_error(f"无法创建更新标记文件: {e}")
+            error_msg = f"无法创建更新标记文件: {e}"
+            print(f"❌ {error_msg}")
+            log_error(error_msg)
             return False
 
         # 保留解压目录供后续更新，但删除zip文件
         try:
+            print("[调试] 清理更新包文件")
             os.remove(update_zip)
-        except:
+        except Exception as e:
+            print(f"[调试] 清理更新包文件失败: {e}")
             pass
         
         print("✅ 更新完成！")
@@ -232,41 +268,56 @@ def download_and_update():
         return True
 
     except Exception as e:
-        print(f"❌ 更新过程中发生错误: {e}")
-        log_error(f"更新过程中发生错误: {e}")
+        error_msg = f"更新过程中发生错误: {e}"
+        print(f"❌ {error_msg}")
+        log_error(error_msg)
         return False
     finally:
         if temp_dir and temp_dir.exists():
             try:
+                print("[调试] 清理临时目录")
                 shutil.rmtree(str(temp_dir))
                 print("已清理临时文件")
             except Exception as e:
-                print(f"清理临时文件失败: {e}")
+                error_msg = f"清理临时文件失败: {e}"
+                print(f"[调试] {error_msg}")
+                log_error(error_msg)
 
 def check_pending_updates():
     """检查是否有待更新的文件"""
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[调试] 检查更新 - 当前目录: {current_dir}")
+        
         pending_update_file = os.path.join(current_dir, "pending_update.json")
+        print(f"[调试] 待更新文件标记路径: {pending_update_file}")
         
         if not os.path.exists(pending_update_file):
+            print("[调试] 未找到待更新文件标记")
             return
             
         try:
+            print("[调试] 读取待更新文件标记")
             with open(pending_update_file, "r", encoding="utf-8") as f:
                 pending_files = json.load(f)
+            print(f"[调试] 待更新文件信息: {json.dumps(pending_files, ensure_ascii=False, indent=2)}")
         except Exception as e:
-            print(f"❌ 读取更新标记文件失败: {e}")
-            log_error(f"读取更新标记文件失败: {e}")
+            error_msg = f"读取更新标记文件失败: {e}"
+            print(f"❌ {error_msg}")
+            log_error(error_msg)
             if os.path.exists(pending_update_file):
                 try:
+                    print("[调试] 删除无效的待更新文件标记")
                     os.remove(pending_update_file)
                 except:
                     pass
             return
             
         source_dir = pending_files.get("source_dir")
+        print(f"[调试] 源文件目录: {source_dir}")
+        
         if not source_dir or not os.path.exists(source_dir):
+            print("[调试] 源文件目录不存在")
             try:
                 os.remove(pending_update_file)
             except:
@@ -277,39 +328,51 @@ def check_pending_updates():
         for file in pending_files["files"]:
             src_path = os.path.join(source_dir, file)
             dst_path = os.path.join(current_dir, file)
+            print(f"[调试] 处理文件: {file}")
+            print(f"[调试] 源路径: {src_path}")
+            print(f"[调试] 目标路径: {dst_path}")
             
             if os.path.exists(src_path):
                 try:
                     # 如果目标文件存在，先删除
                     if os.path.exists(dst_path):
+                        print(f"[调试] 删除已存在的目标文件: {dst_path}")
                         os.remove(dst_path)
+                    print(f"[调试] 开始复制文件: {file}")
                     shutil.copy2(src_path, dst_path)
                     print(f"完成更新文件: {file}")
-                except PermissionError:
-                    print(f"❌ 无法更新文件(权限不足): {file}")
-                    log_error(f"无法更新文件(权限不足): {file}")
+                except PermissionError as e:
+                    error_msg = f"无法更新文件(权限不足): {file}, 错误: {e}"
+                    print(f"❌ {error_msg}")
+                    log_error(error_msg)
                     continue
                 except Exception as e:
-                    print(f"❌ 更新文件失败: {file}, 错误: {e}")
-                    log_error(f"更新文件失败: {file}, 错误: {e}")
+                    error_msg = f"更新文件失败: {file}, 错误: {e}"
+                    print(f"❌ {error_msg}")
+                    log_error(error_msg)
                     continue
                 
         # 清理临时文件和标记文件
         try:
             if os.path.exists(source_dir):
+                print("[调试] 清理源文件目录")
                 shutil.rmtree(os.path.dirname(source_dir))
-        except:
+        except Exception as e:
+            print(f"[调试] 清理源文件目录失败: {e}")
             pass
             
         try:
             if os.path.exists(pending_update_file):
+                print("[调试] 删除待更新文件标记")
                 os.remove(pending_update_file)
-        except:
+        except Exception as e:
+            print(f"[调试] 删除待更新文件标记失败: {e}")
             pass
         
     except Exception as e:
-        print(f"❌ 处理待更新文件时出错: {e}")
-        log_error(f"处理待更新文件时出错: {e}")
+        error_msg = f"处理待更新文件时出错: {e}"
+        print(f"❌ {error_msg}")
+        log_error(error_msg)
 
 def main():
     """主函数"""
