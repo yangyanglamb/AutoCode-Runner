@@ -1029,7 +1029,7 @@ def check_for_updates():
         from version_check_update import get_local_version, check_update, download_and_update, ensure_version_file
         sys.path.pop(0)
         ensure_version_file()
-        console.print("\n[yellow]正在检查更新...[/yellow]", end="\r")
+        console.print("[yellow]正在检查更新...[/yellow]", end="\r")
         update_info = check_update(show_detail=False)  # 关闭详细输出
         if update_info is None:
             console.print("\n[yellow]是否重试检查更新？(y/n)[/yellow]")
