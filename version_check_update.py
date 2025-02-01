@@ -139,6 +139,10 @@ def download_and_update():
         current_dir = os.path.dirname(os.path.abspath(__file__))
         print(f"[调试] 当前目录: {current_dir}")
         
+        # 获取当前运行的Python进程信息
+        current_process = os.getpid()
+        print(f"[调试] 当前进程ID: {current_process}")
+        
         temp_dir = Path(current_dir) / "temp_update"
         print(f"[调试] 临时目录: {temp_dir}")
         
@@ -185,9 +189,7 @@ def download_and_update():
             print(f"[调试] 开始复制文件 从 {src_dir} 到 {dst_dir}")
             # 获取当前运行的Python文件的绝对路径
             current_file = os.path.abspath(__file__)
-            aigene_file = os.path.join(current_dir, "aigene.py")
             print(f"[调试] 当前运行文件: {current_file}")
-            print(f"[调试] aigene文件: {aigene_file}")
             
             for item in os.listdir(src_dir):
                 src_path = os.path.join(src_dir, item)
@@ -197,8 +199,8 @@ def download_and_update():
                 print(f"[调试] 目标路径: {dst_path}")
                 
                 if os.path.isfile(src_path):
-                    # 跳过正在运行的文件
-                    if os.path.abspath(dst_path) in [current_file, aigene_file]:
+                    # 只跳过当前正在运行的文件
+                    if os.path.abspath(dst_path) == current_file:
                         print(f"[调试] 跳过更新正在运行的文件: {item}")
                         continue
                         
@@ -236,8 +238,7 @@ def download_and_update():
         
         pending_files = {
             "files": [
-                os.path.basename(__file__),
-                "aigene.py"
+                os.path.basename(__file__)  # 只标记当前正在运行的文件
             ],
             "source_dir": str(extract_dir),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
