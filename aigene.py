@@ -20,6 +20,7 @@ from rich.panel import Panel
 import json
 import requests
 import shutil
+print("更新成功最后测试")
 """
 在保留原有代码结构和功能的基础上，
 通过 CommandHandler 类来统一管理命令处理逻辑，
