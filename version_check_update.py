@@ -26,7 +26,7 @@ def log_error(message):
 # 版本信息文件路径
 VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
 # API基础URL
-BASE_URL = "http://43.242.201.140:5000"
+BASE_URL = "http://yanglamb.top:5000"
 
 def ensure_version_file():
     """确保版本文件存在"""
